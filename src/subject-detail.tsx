@@ -80,7 +80,11 @@ export function SubjectDetail({ id }: Props) {
 
   async function handleDecrementProgress() {
     const newEp = Math.max(0, currentEp - 1);
-    await mutateCollection({ ep_status: newEp });
+    if (currentType !== 3) {
+      await mutateCollection({ type: 3, ep_status: newEp });
+    } else {
+      await mutateCollection({ ep_status: newEp });
+    }
   }
 
   async function handleIncrementProgress() {
