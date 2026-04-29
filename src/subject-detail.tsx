@@ -2,7 +2,6 @@ import { Action, ActionPanel, Detail } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
 import { getSubject, getSubjectCharacters, getSubjectPersons } from "./api/client";
 import type { RelatedCharacter, RelatedPerson, Subject } from "./api/types";
-import { SubjectTypeLabel } from "./api/types";
 
 interface Props {
   id: number;
@@ -38,29 +37,11 @@ export function SubjectDetail({ id }: Props) {
           {subject && (
             <>
               <Detail.Metadata.Label title="名称" text={truncate(subject.name_cn || subject.name, 20)} />
-              {subject.name_cn && (
-                <Detail.Metadata.Label title="原文" text={truncate(subject.name, 20)} />
-              )}
               <Detail.Metadata.Label title="评分" text={formatScore(subject.rating?.score)} />
               <Detail.Metadata.Label title="排名" text={subject.rank ? `#${subject.rank}` : "暂无"} />
-              <Detail.Metadata.Label
-                title="类型"
-                text={SubjectTypeLabel[subject.type] || `#${subject.type}`}
-              />
               {subject.date && <Detail.Metadata.Label title="日期" text={subject.date} />}
               {subject.eps > 0 && (
                 <Detail.Metadata.Label title="话数" text={String(subject.eps)} />
-              )}
-              <Detail.Metadata.Label
-                title="评分人数"
-                text={formatCount(subject.rating?.total)}
-              />
-              {subject.tags && subject.tags.length > 0 && (
-                <Detail.Metadata.TagList title="标签">
-                  {subject.tags.slice(0, 6).map((t) => (
-                    <Detail.Metadata.TagList.Item key={t.name} text={t.name} />
-                  ))}
-                </Detail.Metadata.TagList>
               )}
             </>
           )}
@@ -89,20 +70,25 @@ function buildMarkdown(
 ): string {
   const lines: string[] = [];
 
-  if (subject?.images?.large) {
-    lines.push(
-      `![${subject.name_cn || subject.name}](${subject.images.large}?raycast-width=380)`,
-    );
-    lines.push("");
+  // ---------- Row 1: cover image + summary side by side ----------
+  if (subject) {
+    const img = subject.images?.large ?? subject.images?.common ?? "";
+    const summary = subject.summary
+      ? truncate(subject.summary.replace(/\n/g, " "), 300)
+      : "暂无简介";
+
+    if (img) {
+      lines.push("| | |");
+      lines.push("|---|---|");
+      lines.push(`| ![cover](${img}?raycast-width=180) | ${summary} |`);
+      lines.push("");
+    } else {
+      lines.push(summary);
+      lines.push("");
+    }
   }
 
-  if (subject?.summary) {
-    lines.push("## 简介");
-    lines.push("");
-    lines.push(subject.summary);
-    lines.push("");
-  }
-
+  // ---------- Row 2: Staff ----------
   const staffLines = buildStaffSection(persons);
   if (staffLines.length > 1) {
     lines.push("## Staff");
@@ -111,6 +97,7 @@ function buildMarkdown(
     lines.push("");
   }
 
+  // ---------- Row 3: Cast ----------
   const castLines = buildCastSection(characters);
   if (castLines.length > 1) {
     lines.push("## 角色 / Cast");
@@ -161,10 +148,4 @@ function truncate(text: string, max: number): string {
 function formatScore(score: number | undefined): string {
   if (score === undefined || score === null) return "暂无";
   return `${score.toFixed(1)} / 10`;
-}
-
-function formatCount(n: number | undefined): string {
-  if (n === undefined || n === null) return "暂无";
-  if (n >= 10000) return `${(n / 10000).toFixed(1)}万`;
-  return String(n);
 }
