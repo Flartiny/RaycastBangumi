@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Action, ActionPanel, Detail, confirmAlert, getPreferenceValues } from "@raycast/api";
+import { Action, ActionPanel, Detail, Keyboard, confirmAlert, getPreferenceValues } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
 import {
   getEpisodes,
@@ -232,30 +232,22 @@ export function SubjectDetail({ id }: Props) {
       }
       actions={
         <ActionPanel>
-          {isDirty && totalEp > 0 && (
-            <ActionPanel.Section>
+          <ActionPanel.Section>
+            {isDirty && totalEp > 0 ? (
               <Action
                 title={`提交进度: ${currentEp}→${targetEp}/${totalEp}`}
                 onAction={commitProgress}
               />
-            </ActionPanel.Section>
-          )}
-
-          <ActionPanel.Section>
-            <Action.CopyToClipboard
-              title="复制名称"
-              content={subject?.name_cn || subject?.name || ""}
-            />
+            ) : (
+              <Action.CopyToClipboard
+                title="复制名称"
+                content={subject?.name_cn || subject?.name || ""}
+              />
+            )}
           </ActionPanel.Section>
 
           {totalEp > 0 && (
             <ActionPanel.Section title="观看进度">
-              {!isDirty && (
-                <Action
-                  title={`目标: ${targetEp ?? currentEp} / ${totalEp}`}
-                  onAction={commitProgress}
-                />
-              )}
               <Action
                 title="−1 集"
                 shortcut={{ key: "arrowLeft", modifiers: [] }}
@@ -286,6 +278,7 @@ export function SubjectDetail({ id }: Props) {
           <ActionPanel.Section>
             <Action.OpenInBrowser
               title="在 Bangumi 中打开"
+              shortcut={Keyboard.Shortcut.Common.Open}
               url={`https://bgm.tv/subject/${id}`}
             />
             <Action.CopyToClipboard
