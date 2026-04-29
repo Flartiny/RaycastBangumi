@@ -47,7 +47,35 @@
       "subtitle": "Bangumi"
     }
   ],
-  "preferences": [],
+  "preferences": [
+    {
+      "name": "confirmBeforeWatching",
+      "title": "切换在看确认",
+      "description": "调整进度时，若当前不在「在看」状态，先询问是否切换到「在看」",
+      "type": "checkbox",
+      "required": false,
+      "default": true,
+      "label": "切换到「在看」前询问"
+    },
+    {
+      "name": "autoMarkWatched",
+      "title": "自动标记看过",
+      "description": "进度达到总集数时自动将状态标记为「看过」（跳过确认）",
+      "type": "checkbox",
+      "required": false,
+      "default": false,
+      "label": "自动标记为「看过」"
+    },
+    {
+      "name": "confirmProgressUpdate",
+      "title": "看过时更新进度确认",
+      "description": "手动标记「看过」时，询问是否将观看进度更新为总集数",
+      "type": "checkbox",
+      "required": false,
+      "default": true,
+      "label": "标记「看过」时询问进度更新"
+    }
+  ],
   "title": "Bangumi",
   "author": "Flartiny",
   "platforms": [

@@ -113,6 +113,7 @@ export async function postUserCollection(
     comment?: string;
     tags?: string[];
     private?: boolean;
+    ep_status?: number;
   },
 ): Promise<void> {
   await request(`/v0/users/-/collections/${subjectId}`, {
