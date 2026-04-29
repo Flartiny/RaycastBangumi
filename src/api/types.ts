@@ -39,6 +39,7 @@ export interface Subject {
   images: BangumiImage;
   summary: string;
   eps: number;
+  total_episodes: number;
   rating: Rating;
   rank: number;
   date: string;

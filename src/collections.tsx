@@ -241,7 +241,7 @@ function CollectionListItem({
               {collection.ep_status > 0 && (
                 <List.Item.Detail.Metadata.Label
                   title="观看进度"
-                  text={`${collection.ep_status} / ${subject.eps || "?"} 话`}
+                  text={`${collection.ep_status} / {subject.total_episodes || subject.eps || "?"}`}
                 />
               )}
               {collection.comment && (

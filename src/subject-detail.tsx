@@ -1,6 +1,7 @@
 import { Action, ActionPanel, Detail } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
-import { getSubject, getSubjectCharacters, getSubjectPersons } from "./api/client";
+import { getSubject, getSubjectCharacters, getSubjectPersons, getUserCollection } from "./api/client";
+import { getUsername } from "./oauth";
 import type { RelatedCharacter, RelatedPerson, Subject } from "./api/types";
 
 interface Props {
@@ -23,6 +24,19 @@ export function SubjectDetail({ id }: Props) {
     [id],
     { keepPreviousData: true },
   );
+  const { data: collection } = useCachedPromise(
+    async (subjectId: number) => {
+      const uname = await getUsername();
+      if (!uname) return null;
+      try {
+        return await getUserCollection(uname, subjectId);
+      } catch {
+        return null;
+      }
+    },
+    [id],
+    { keepPreviousData: true },
+  );
 
   const isLoading = loadingSubject || loadingPersons || loadingChars;
   const markdown = buildMarkdown(subject ?? null, persons ?? null, characters ?? null);
@@ -40,8 +54,15 @@ export function SubjectDetail({ id }: Props) {
               <Detail.Metadata.Label title="评分" text={formatScore(subject.rating?.score)} />
               <Detail.Metadata.Label title="排名" text={subject.rank ? `#${subject.rank}` : "暂无"} />
               {subject.date && <Detail.Metadata.Label title="放送日期" text={subject.date} />}
-              {subject.eps > 0 && (
-                <Detail.Metadata.Label title="话数" text={String(subject.eps)} />
+              {subject.total_episodes > 0 && (
+                <Detail.Metadata.Label
+                  title="观看进度"
+                  text={
+                    collection
+                      ? `${collection.ep_status} / ${subject.total_episodes}`
+                      : `0 / ${subject.total_episodes}`
+                  }
+                />
               )}
             </>
           )}
