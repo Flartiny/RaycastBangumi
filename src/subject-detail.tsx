@@ -49,14 +49,23 @@ export function SubjectDetail({ id }: Props) {
       }
       actions={
         <ActionPanel>
-          <Action.OpenInBrowser
-            title="在 Bangumi 中打开"
-            url={`https://bgm.tv/subject/${id}`}
-          />
-          <Action.CopyToClipboard
-            title="复制条目链接"
-            content={`https://bgm.tv/subject/${id}`}
-          />
+          <ActionPanel.Section>
+            <Action.CopyToClipboard
+              title="复制名称"
+              content={subject?.name_cn || subject?.name || ""}
+            />
+          </ActionPanel.Section>
+          <ActionPanel.Section>
+            <Action.OpenInBrowser
+              title="在 Bangumi 中打开"
+              shortcut={{ key: "enter", modifiers: ["cmd"] }}
+              url={`https://bgm.tv/subject/${id}`}
+            />
+            <Action.CopyToClipboard
+              title="复制条目链接"
+              content={`https://bgm.tv/subject/${id}`}
+            />
+          </ActionPanel.Section>
         </ActionPanel>
       }
     />

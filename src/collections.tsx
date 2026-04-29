@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Action, ActionPanel, Color, Image, List, getPreferenceValues } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
 import { getUserCollections } from "./api/client";
+import { SubjectDetail } from "./subject-detail";
 import { CollectionTypeLabel, SubjectTypeLabel } from "./api/types";
 import type { CollectionType, UserCollection } from "./api/types";
 
@@ -9,6 +10,8 @@ interface Preferences {
   accessToken: string;
   username: string;
 }
+
+const LIMIT = 20;
 
 const COLLECTION_TYPES: { label: string; value: string }[] = [
   { label: "想看", value: "1" },
@@ -29,22 +32,27 @@ const RATE_COLORS: Record<number, Color> = {
 
 export default function Command() {
   const { accessToken, username } = getPreferenceValues<Preferences>();
-  const [collectionType, setCollectionType] = useState("3"); // default: 在看
+  const [collectionType, setCollectionType] = useState("3");
+  const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    setPage(1);
+  }, [collectionType]);
 
   const {
     isLoading,
     data: result,
     error,
-    revalidate,
   } = useCachedPromise(
-    async (type: string) => {
+    async (type: string, pageNum: number) => {
       return getUserCollections({
         username,
         type: parseInt(type),
-        limit: 50,
+        limit: LIMIT,
+        offset: (pageNum - 1) * LIMIT,
       });
     },
-    [collectionType],
+    [collectionType, page],
     {
       keepPreviousData: true,
       execute: !!accessToken && !!username,
@@ -52,11 +60,32 @@ export default function Command() {
   );
 
   const collections = result?.data ?? [];
+  const total = result?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / LIMIT));
+  const typeLabel = CollectionTypeLabel[parseInt(collectionType) as CollectionType];
+
+  function goNext() {
+    setPage((p) => Math.min(p + 1, totalPages));
+  }
+
+  function goPrev() {
+    setPage((p) => Math.max(p - 1, 1));
+  }
+
+  function goFirst() {
+    setPage(1);
+  }
+
+  function goLast() {
+    setPage(totalPages);
+  }
+
+  const showContent = accessToken && username && !error;
 
   return (
     <List
       isLoading={isLoading}
-      searchBarPlaceholder="筛选收藏条目..."
+      searchBarPlaceholder={`筛选${typeLabel}条目...`}
       searchBarAccessory={
         <List.Dropdown
           tooltip="收藏状态"
@@ -88,28 +117,70 @@ export default function Command() {
       {error && (
         <List.EmptyView title="加载失败" description={error.message} />
       )}
-      {!isLoading && collections.length === 0 && accessToken && username && (
+      {!isLoading && showContent && collections.length === 0 && page === 1 && (
         <List.EmptyView
           title="暂无数据"
-          description={`没有${CollectionTypeLabel[parseInt(collectionType) as CollectionType]}条目`}
+          description={`没有${typeLabel}条目`}
         />
       )}
-      {collections.map((item) => (
-        <CollectionListItem
-          key={item.subject_id}
-          collection={item}
-          onRevalidate={revalidate}
+      {!isLoading && showContent && collections.length === 0 && page > 1 && (
+        <List.EmptyView
+          title="翻过头了"
+          description={`第 ${page} 页无数据，共 ${totalPages} 页`}
+          actions={
+            <ActionPanel>
+              <Action
+                title="前一页"
+                shortcut={{ key: "arrowLeft", modifiers: [] }}
+                onAction={goPrev}
+              />
+              <Action
+                title="回到第 1 页"
+                shortcut={{ key: "home", modifiers: [] }}
+                onAction={goFirst}
+              />
+            </ActionPanel>
+          }
         />
-      ))}
+      )}
+      {showContent && (
+        <List.Section
+          title={`${typeLabel} · 第 ${page} / ${totalPages} 页 · 共 ${total} 条`}
+        >
+          {collections.map((item) => (
+            <CollectionListItem
+              key={item.subject_id}
+              collection={item}
+              page={page}
+              totalPages={totalPages}
+              onPrev={goPrev}
+              onNext={goNext}
+              onFirst={goFirst}
+              onLast={goLast}
+            />
+          ))}
+        </List.Section>
+      )}
     </List>
   );
 }
 
 function CollectionListItem({
   collection,
+  page,
+  totalPages,
+  onPrev,
+  onNext,
+  onFirst,
+  onLast,
 }: {
   collection: UserCollection;
-  onRevalidate: () => void;
+  page: number;
+  totalPages: number;
+  onPrev: () => void;
+  onNext: () => void;
+  onFirst: () => void;
+  onLast: () => void;
 }) {
   const subject = collection.subject;
   const typeLabel = SubjectTypeLabel[subject.type] || "未知";
@@ -196,6 +267,14 @@ function CollectionListItem({
       actions={
         <ActionPanel>
           <ActionPanel.Section>
+            <Action.Push
+              title="查看详情"
+              target={
+                <SubjectDetail id={subject.id} />
+              }
+            />
+          </ActionPanel.Section>
+          <ActionPanel.Section>
             <Action.OpenInBrowser
               title="在 Bangumi 中打开"
               url={`https://bgm.tv/subject/${subject.id}`}
@@ -204,6 +283,36 @@ function CollectionListItem({
               title="复制条目链接"
               content={`https://bgm.tv/subject/${subject.id}`}
             />
+          </ActionPanel.Section>
+          <ActionPanel.Section>
+            {page > 1 && (
+              <Action
+                title="前一页"
+                shortcut={{ key: "arrowLeft", modifiers: [] }}
+                onAction={onPrev}
+              />
+            )}
+            {page < totalPages && (
+              <Action
+                title="后一页"
+                shortcut={{ key: "arrowRight", modifiers: [] }}
+                onAction={onNext}
+              />
+            )}
+            {page !== 1 && (
+              <Action
+                title="回到第 1 页"
+                shortcut={{ key: "home", modifiers: [] }}
+                onAction={onFirst}
+              />
+            )}
+            {page !== totalPages && totalPages > 1 && (
+              <Action
+                title="跳到最后页"
+                shortcut={{ key: "end", modifiers: [] }}
+                onAction={onLast}
+              />
+            )}
           </ActionPanel.Section>
         </ActionPanel>
       }
