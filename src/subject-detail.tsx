@@ -89,23 +89,20 @@ export function SubjectDetail({ id }: Props) {
     await revalidateCollection();
   }
 
-  async function commitProgress() {
-    if (!isDirty || targetEp === null) return;
-
-    // Ensure subject is collected as "在看" (required by API before updating episodes)
+  async function ensureCollected(): Promise<boolean> {
     if (!collection) {
-      // Never collected — always ask
       const confirmed = await confirmAlert({
         title: "收藏并切换到「在看」？",
         message: "更新观看进度需要先将条目以「在看」状态收藏",
         primaryAction: { title: "收藏" },
         dismissAction: { title: "取消" },
       });
-      if (!confirmed) return;
+      if (!confirmed) return false;
       await postUserCollection(id, { type: 3 });
       await revalidateCollection();
-    } else if (currentType !== 3) {
-      // Already collected but not watching
+      return true;
+    }
+    if (currentType !== 3) {
       if (preferences.confirmBeforeWatching) {
         const confirmed = await confirmAlert({
           title: "切换到「在看」？",
@@ -113,20 +110,42 @@ export function SubjectDetail({ id }: Props) {
           primaryAction: { title: "切换" },
           dismissAction: { title: "取消" },
         });
-        if (!confirmed) return;
+        if (!confirmed) return false;
       }
       await mutateCollection({ type: 3 });
     }
+    return true;
+  }
+
+  async function doMarkEpisodes(from: number, to: number, epType: number) {
+    try {
+      const ids = sortedEpisodes.slice(from, to).map((e) => e.id);
+      if (ids.length === 0) return;
+      await patchSubjectEpisodes(id, { episode_id: ids, type: epType });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "";
+      if (msg.includes("need to add subject")) {
+        // API says not collected — retry with ensureCollected
+        const ok = await ensureCollected();
+        if (!ok) throw e;
+        await patchSubjectEpisodes(id, { episode_id: sortedEpisodes.slice(from, to).map((ep) => ep.id), type: epType });
+      } else {
+        throw e;
+      }
+    }
+  }
+
+  async function commitProgress() {
+    if (!isDirty || targetEp === null) return;
+
+    const ok = await ensureCollected();
+    if (!ok) return;
 
     const from = Math.min(currentEp, targetEp);
     const to = Math.max(currentEp, targetEp);
 
     if (targetEp > currentEp) {
-      // Mark episodes from currentEp to targetEp-1 as watched
-      if (from < to && from < sortedEpisodes.length) {
-        const ids = sortedEpisodes.slice(from, to).map((e) => e.id);
-        await patchSubjectEpisodes(id, { episode_id: ids, type: 2 });
-      }
+      await doMarkEpisodes(from, to, 2);
       // Handle reaching total
       if (targetEp >= totalEp) {
         if (preferences.autoMarkWatched) {
@@ -144,11 +163,7 @@ export function SubjectDetail({ id }: Props) {
         }
       }
     } else if (targetEp < currentEp) {
-      // Unmark episodes from targetEp to currentEp-1
-      if (from < to && from < sortedEpisodes.length) {
-        const ids = sortedEpisodes.slice(from, to).map((e) => e.id);
-        await patchSubjectEpisodes(id, { episode_id: ids, type: 0 });
-      }
+      await doMarkEpisodes(from, to, 0);
     }
 
     setTargetEp(null);
@@ -172,10 +187,7 @@ export function SubjectDetail({ id }: Props) {
       });
       if (shouldUpdate) {
         await mutateCollection({ type });
-        const episodeIds = sortedEpisodes.map((e) => e.id);
-        if (episodeIds.length > 0) {
-          await patchSubjectEpisodes(id, { episode_id: episodeIds, type: 2 });
-        }
+        await doMarkEpisodes(0, sortedEpisodes.length, 2);
         return;
       }
     }
