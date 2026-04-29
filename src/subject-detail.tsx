@@ -39,7 +39,7 @@ export function SubjectDetail({ id }: Props) {
               <Detail.Metadata.Label title="名称" text={truncate(subject.name_cn || subject.name, 20)} />
               <Detail.Metadata.Label title="评分" text={formatScore(subject.rating?.score)} />
               <Detail.Metadata.Label title="排名" text={subject.rank ? `#${subject.rank}` : "暂无"} />
-              {subject.date && <Detail.Metadata.Label title="日期" text={subject.date} />}
+              {subject.date && <Detail.Metadata.Label title="放送日期" text={subject.date} />}
               {subject.eps > 0 && (
                 <Detail.Metadata.Label title="话数" text={String(subject.eps)} />
               )}
@@ -70,20 +70,11 @@ function buildMarkdown(
 ): string {
   const lines: string[] = [];
 
-  // ---------- Row 1: cover image + summary side by side ----------
+  // ---------- Row 1: cover image ----------
   if (subject) {
     const img = subject.images?.large ?? subject.images?.common ?? "";
-    const summary = subject.summary
-      ? truncate(subject.summary.replace(/\n/g, " "), 300)
-      : "暂无简介";
-
     if (img) {
-      lines.push("| | |");
-      lines.push("|---|---|");
-      lines.push(`| ![cover](${img}?raycast-width=180) | ${summary} |`);
-      lines.push("");
-    } else {
-      lines.push(summary);
+      lines.push(`![cover](${img}?raycast-width=280)`);
       lines.push("");
     }
   }
