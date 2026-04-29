@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Action, ActionPanel, Color, Image, List } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
 import { getCalendar } from "./api/client";
+import { SubjectDetail } from "./subject-detail";
 import type { CalendarItem, SubjectSmall } from "./api/types";
 
 const WEEKDAY_CN: Record<number, string> = {
@@ -188,6 +189,22 @@ function CalendarSubjectItem({
       actions={
         <ActionPanel>
           <ActionPanel.Section>
+            <Action.Push
+              title="查看详情"
+              target={<SubjectDetail id={subject.id} />}
+            />
+          </ActionPanel.Section>
+          <ActionPanel.Section>
+            <Action.OpenInBrowser
+              title="在 Bangumi 中打开"
+              url={`https://bgm.tv/subject/${subject.id}`}
+            />
+            <Action.CopyToClipboard
+              title="复制条目链接"
+              content={`https://bgm.tv/subject/${subject.id}`}
+            />
+          </ActionPanel.Section>
+          <ActionPanel.Section>
             <Action
               title="前一天"
               shortcut={{ key: "arrowLeft", modifiers: [] }}
@@ -205,16 +222,6 @@ function CalendarSubjectItem({
                 onAction={onToday}
               />
             )}
-          </ActionPanel.Section>
-          <ActionPanel.Section>
-            <Action.OpenInBrowser
-              title="在 Bangumi 中打开"
-              url={`https://bgm.tv/subject/${subject.id}`}
-            />
-            <Action.CopyToClipboard
-              title="复制条目链接"
-              content={`https://bgm.tv/subject/${subject.id}`}
-            />
           </ActionPanel.Section>
         </ActionPanel>
       }

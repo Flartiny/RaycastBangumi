@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Action, ActionPanel, Image, List, getPreferenceValues } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
 import { searchSubjects } from "./api/client";
+import { SubjectDetail } from "./subject-detail";
 import { SubjectTypeLabel } from "./api/types";
 import type { Subject } from "./api/types";
 
@@ -130,6 +131,12 @@ function SubjectListItem({ subject }: { subject: Subject }) {
       }
       actions={
         <ActionPanel>
+          <ActionPanel.Section>
+            <Action.Push
+              title="查看详情"
+              target={<SubjectDetail id={subject.id} />}
+            />
+          </ActionPanel.Section>
           <ActionPanel.Section>
             <Action.OpenInBrowser
               title="在 Bangumi 中打开"

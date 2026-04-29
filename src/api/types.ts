@@ -113,3 +113,47 @@ export const SubjectTypeLabel: Record<number, string> = {
   4: "游戏",
   6: "三次元",
 };
+
+// ---------- Persons ----------
+
+export interface PersonImages {
+  large: string;
+  medium: string;
+  small: string;
+  grid: string;
+}
+
+export interface RelatedPerson {
+  id: number;
+  name: string;
+  type: number; // 1=individual, 2=corporation
+  images?: PersonImages;
+  relation: string;
+  career: string[];
+  short_summary: string;
+}
+
+// ---------- Characters ----------
+
+export interface CharacterImages {
+  large: string;
+  medium: string;
+  small: string;
+  grid: string;
+}
+
+export interface PersonInfo {
+  id: number;
+  name: string;
+  type: number;
+  images?: PersonImages;
+}
+
+export interface RelatedCharacter {
+  id: number;
+  name: string;
+  type: number;
+  images?: CharacterImages;
+  relation: string;
+  actors: PersonInfo[];
+}

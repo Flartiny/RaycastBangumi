@@ -2,6 +2,8 @@ import { getPreferenceValues } from "@raycast/api";
 import type {
   CalendarItem,
   PagedResponse,
+  RelatedCharacter,
+  RelatedPerson,
   SearchResponse,
   Subject,
   User,
@@ -133,4 +135,18 @@ export async function getUserCollection(
   return request<UserCollection>(
     `/v0/users/${username}/collections/${subjectId}`,
   );
+}
+
+/** GET /v0/subjects/{id}/persons — 获取条目关联人物 */
+export async function getSubjectPersons(
+  subjectId: number,
+): Promise<RelatedPerson[]> {
+  return request<RelatedPerson[]>(`/v0/subjects/${subjectId}/persons`);
+}
+
+/** GET /v0/subjects/{id}/characters — 获取条目关联角色 */
+export async function getSubjectCharacters(
+  subjectId: number,
+): Promise<RelatedCharacter[]> {
+  return request<RelatedCharacter[]>(`/v0/subjects/${subjectId}/characters`);
 }
