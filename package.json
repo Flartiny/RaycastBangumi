@@ -27,21 +27,21 @@
   "commands": [
     {
       "name": "search",
-      "title": "Search Bangumi",
+      "title": "Bangumi Search",
       "description": "Search subjects on Bangumi by keyword",
       "mode": "view",
       "subtitle": "Bangumi"
     },
     {
       "name": "calendar",
-      "title": "Daily Broadcast",
+      "title": "Bangumi Calendar",
       "description": "View this week's daily broadcast schedule",
       "mode": "view",
       "subtitle": "Bangumi"
     },
     {
       "name": "collections",
-      "title": "My Collections",
+      "title": "Bangumi List",
       "description": "Browse your collections (Wish/Collect/Do)",
       "mode": "view",
       "subtitle": "Bangumi"
