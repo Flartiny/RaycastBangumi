@@ -40,7 +40,9 @@ async function request<T>(
     throw new Error(`Bangumi API error ${res.status}: ${body}`);
   }
 
-  return res.json() as Promise<T>;
+  const text = await res.text();
+  if (!text) return undefined as T;
+  return JSON.parse(text) as T;
 }
 
 /** GET /calendar — 每日放送 */
