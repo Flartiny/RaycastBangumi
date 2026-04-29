@@ -1,4 +1,3 @@
-import { getPreferenceValues } from "@raycast/api";
 import { getAccessToken } from "../oauth";
 import type {
   CalendarItem,
@@ -10,11 +9,6 @@ import type {
   User,
   UserCollection,
 } from "./types";
-
-interface Preferences {
-  accessToken: string;
-  username: string;
-}
 
 const BASE_URL = "https://api.bgm.tv";
 
@@ -90,14 +84,13 @@ export async function getMyself(): Promise<User> {
 
 /** GET /v0/users/{username}/collections — 获取用户收藏 */
 export async function getUserCollections(params: {
-  username?: string;
+  username: string;
   subjectType?: number;
   type?: number;
   limit?: number;
   offset?: number;
 }): Promise<PagedResponse<UserCollection>> {
-  const { username } = getPreferenceValues<Preferences>();
-  const uname = params.username || username;
+  const uname = params.username;
 
   const searchParams = new URLSearchParams();
   if (params.subjectType) searchParams.set("subject_type", String(params.subjectType));

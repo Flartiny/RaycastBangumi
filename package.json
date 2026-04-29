@@ -26,13 +26,6 @@
   "icon": "extension-icon.png",
   "commands": [
     {
-      "name": "login",
-      "title": "Login Bangumi",
-      "description": "Log in to your Bangumi account via OAuth",
-      "mode": "view",
-      "subtitle": "Bangumi"
-    },
-    {
       "name": "search",
       "title": "Search Bangumi",
       "description": "Search subjects on Bangumi by keyword",
@@ -54,42 +47,7 @@
       "subtitle": "Bangumi"
     }
   ],
-  "preferences": [
-    {
-      "name": "accessToken",
-      "title": "Access Token (optional fallback)",
-      "description": "OAuth 登录失败时可用的备用 Token。获取地址: https://next.bgm.tv/demo/access-token",
-      "type": "password",
-      "required": false,
-      "placeholder": "Paste your access token here"
-    },
-    {
-      "name": "username",
-      "title": "Username",
-      "description": "Your Bangumi username (used for collections API)",
-      "type": "textfield",
-      "required": false,
-      "placeholder": "your_bangumi_username"
-    }
-  ],
-  "environment": [
-    {
-      "name": "CLIENT_ID",
-      "title": "Bangumi OAuth App ID",
-      "description": "从 https://bgm.tv/dev/app 获取",
-      "type": "textfield",
-      "required": false,
-      "default": "bgm602569f1d18f7f061"
-    },
-    {
-      "name": "CLIENT_SECRET",
-      "title": "Bangumi OAuth App Secret",
-      "description": "从 https://bgm.tv/dev/app 获取",
-      "type": "password",
-      "required": false,
-      "default": "29dbdbd38d77fa4b23d32a05a7c9ebce"
-    }
-  ],
+  "preferences": [],
   "title": "Bangumi",
   "author": "Flartiny",
   "platforms": [

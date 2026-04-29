@@ -1,50 +1,80 @@
-import { OAuth, getPreferenceValues } from "@raycast/api";
+import { LocalStorage, OAuth } from "@raycast/api";
+import { OAuthService } from "@raycast/utils";
 
-interface Preferences {
-  accessToken: string;
-}
-
-const CLIENT_ID = process.env.CLIENT_ID || "";
-const CLIENT_SECRET = process.env.CLIENT_SECRET || "";
+const USERNAME_CACHE_KEY = "bangumi_username";
 
 export const oauthClient = new OAuth.PKCEClient({
-  redirectMethod: OAuth.RedirectMethod.Web,
+  redirectMethod: OAuth.RedirectMethod.AppURI,
   providerName: "Bangumi",
   providerIcon: "extension-icon.png",
   providerId: "bangumi",
   description: "登录 Bangumi 账户以使用收藏等高级功能",
 });
 
+const bangumiOAuth = new OAuthService({
+  client: oauthClient,
+  clientId: "bgm602569f1d18f7f061",
+  authorizeUrl:
+    "https://oauth.raycast.com/v1/authorize/E2PP3iKmb5JlZ5QHnxr_pMS0eXVxfq8fni3yhSfEuTWP-9zrGQvNmMZFXMSZI5Z9rjbpTPAkrtcTdZa5MiqugJ_8pfKbv2FbrXwAGAhQJb8PmhzoWJOOwKAUXtk",
+  tokenUrl:
+    "https://oauth.raycast.com/v1/token/mRKNpPCabwMLkMaLp8LQ1quMeAlZbElU1E1kgfW-wxTda5wiUD5v8Ktx8tBTUSAQlYdKJUHYIVLf5o23cRuRhFS4L2TTDdUvq0qXGxvpPPC4tXNaPv9veC8qx3dgngs",
+  refreshTokenUrl:
+    "https://oauth.raycast.com/v1/refresh-token/sVkEaU9uSQj-x-jqMbDTgP7bmUu6YKKbFEcOslLZrJa_b1ww4E4SXW1d0t30PTGEXGOw2s3ghgg5ZfiYwYCe7z0GTYfFeB6J2XQN8VZnr3-klv4w2t0RYmyk5GQX1zw",
+  scope: "",
+  bodyEncoding: "json",
+  tokenResponseParser: (response) => {
+    const data = response as {
+      access_token: string;
+      refresh_token?: string;
+      expires_in?: number;
+      scope?: string | null;
+      user_id?: number;
+    };
+    return {
+      access_token: data.access_token,
+      refresh_token: data.refresh_token,
+      expires_in: data.expires_in,
+      ...(typeof data.scope === "string" ? { scope: data.scope } : {}),
+    };
+  },
+  tokenRefreshResponseParser: (response) => {
+    const data = response as {
+      access_token: string;
+      refresh_token?: string;
+      expires_in?: number;
+      scope?: string | null;
+    };
+    return {
+      access_token: data.access_token,
+      refresh_token: data.refresh_token,
+      expires_in: data.expires_in,
+      ...(typeof data.scope === "string" ? { scope: data.scope } : {}),
+    };
+  },
+});
+
+/** Check login status without triggering OAuth flow */
 export async function isLoggedIn(): Promise<boolean> {
-  const tokens = await oauthClient.getTokens();
-  return !!tokens?.accessToken;
-}
-
-/** Returns the current access token, trying OAuth first then manual preference */
-export async function getAccessToken(): Promise<string> {
-  const tokens = await oauthClient.getTokens();
-  if (tokens?.accessToken) {
-    return tokens.accessToken;
+  try {
+    const tokens = await oauthClient.getTokens();
+    return !!tokens?.accessToken;
+  } catch {
+    return false;
   }
-  // Fallback to manual token from preferences
-  const { accessToken } = getPreferenceValues<Preferences>();
-  return accessToken || "";
 }
 
-/** Start the OAuth login flow. Returns true on success. */
+/** Get access token via OAuth (auto-refreshes if needed) */
+export async function getAccessToken(): Promise<string> {
+  const token = await bangumiOAuth.authorize();
+  return token ?? "";
+}
+
+/** Start OAuth login flow. Automatically fetches and caches username on success. */
 export async function login(): Promise<boolean> {
   try {
-    const authRequest = await oauthClient.authorizationRequest({
-      endpoint: "https://bgm.tv/oauth/authorize",
-      clientId: CLIENT_ID,
-      scope: "",
-    });
-
-    const { authorizationCode } = await oauthClient.authorize(authRequest);
-
-    const tokenResponse = await fetchTokens(authRequest, authorizationCode);
-
-    await oauthClient.setTokens(tokenResponse);
+    await bangumiOAuth.authorize();
+    // Fetch username in the background and cache it
+    fetchAndCacheUsername().catch(() => {});
     return true;
   } catch (error) {
     console.error("OAuth login failed:", error);
@@ -52,42 +82,33 @@ export async function login(): Promise<boolean> {
   }
 }
 
-export async function logout(): Promise<void> {
-  await oauthClient.removeTokens();
+async function fetchAndCacheUsername() {
+  try {
+    const token = await bangumiOAuth.authorize();
+    const res = await fetch("https://api.bgm.tv/v0/me", {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "User-Agent": "RaycastBangumi/1.0",
+      },
+    });
+    if (res.ok) {
+      const data = (await res.json()) as { username: string };
+      if (data.username) {
+        await LocalStorage.setItem(USERNAME_CACHE_KEY, data.username);
+      }
+    }
+  } catch {
+    // non-critical, ignore
+  }
 }
 
-async function fetchTokens(
-  authRequest: OAuth.AuthorizationRequest,
-  code: string,
-): Promise<OAuth.TokenResponse> {
-  const response = await fetch("https://bgm.tv/oauth/access_token", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      grant_type: "authorization_code",
-      client_id: CLIENT_ID,
-      client_secret: CLIENT_SECRET,
-      code,
-      redirect_uri: authRequest.redirectURI,
-    }),
-  });
+/** Get username from cache (auto-detected on first login) */
+export async function getUsername(): Promise<string> {
+  const cached = await LocalStorage.getItem<string>(USERNAME_CACHE_KEY);
+  return cached ?? "";
+}
 
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Token exchange failed: ${response.status} ${text}`);
-  }
-
-  const data = (await response.json()) as {
-    access_token: string;
-    expires_in: number;
-    token_type: string;
-    refresh_token: string;
-    user_id: number;
-  };
-
-  return {
-    access_token: data.access_token,
-    refresh_token: data.refresh_token,
-    expires_in: data.expires_in,
-  } satisfies OAuth.TokenResponse;
+/** Remove stored tokens (also available via Raycast Settings) */
+export async function logout(): Promise<void> {
+  await oauthClient.removeTokens();
 }

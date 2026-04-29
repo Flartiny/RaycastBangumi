@@ -1,14 +1,10 @@
 import { useState } from "react";
-import { Action, ActionPanel, Image, List, getPreferenceValues } from "@raycast/api";
+import { Action, ActionPanel, Image, List } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
 import { searchSubjects } from "./api/client";
 import { SubjectDetail } from "./subject-detail";
 import { SubjectTypeLabel } from "./api/types";
 import type { Subject } from "./api/types";
-
-interface Preferences {
-  accessToken: string;
-}
 
 const subjectTypeOptions: { label: string; value: string }[] = [
   { label: "全部", value: "" },
@@ -20,7 +16,6 @@ const subjectTypeOptions: { label: string; value: string }[] = [
 ];
 
 export default function Command() {
-  const { accessToken } = getPreferenceValues<Preferences>();
   const [searchText, setSearchText] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
 
@@ -65,13 +60,7 @@ export default function Command() {
         </List.Dropdown>
       }
     >
-      {!accessToken && (
-        <List.EmptyView
-          title="未配置 Access Token"
-          description="请在扩展偏好设置中填入 Bangumi Access Token"
-        />
-      )}
-      {accessToken && !searchText.trim() && (
+      {!searchText.trim() && (
         <List.EmptyView title="输入关键词开始搜索" description="支持搜索番剧、书籍、音乐、游戏等" />
       )}
       {error && (

@@ -1,15 +1,13 @@
 import { useEffect, useState } from "react";
-import { Action, ActionPanel, Color, Image, List, getPreferenceValues } from "@raycast/api";
+import { Action, ActionPanel, Color, Image, List } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
 import { getUserCollections } from "./api/client";
+import { getUsername } from "./oauth";
 import { SubjectDetail } from "./subject-detail";
+import { useAuth } from "./hooks/useAuth";
+import { LoginLoading, LoginPrompt } from "./components/LoginPrompt";
 import { CollectionTypeLabel, SubjectTypeLabel } from "./api/types";
 import type { CollectionType, UserCollection } from "./api/types";
-
-interface Preferences {
-  accessToken: string;
-  username: string;
-}
 
 const LIMIT = 20;
 
@@ -31,9 +29,16 @@ const RATE_COLORS: Record<number, Color> = {
 };
 
 export default function Command() {
-  const { accessToken, username } = getPreferenceValues<Preferences>();
+  const { authLoading, authenticated, loginFailed, handleLogin } = useAuth({ autoLogin: true });
+  const [username, setUsername] = useState<string | null>(null);
   const [collectionType, setCollectionType] = useState("3");
   const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    if (authenticated) {
+      getUsername().then((u) => setUsername(u || ""));
+    }
+  }, [authenticated]);
 
   useEffect(() => {
     setPage(1);
@@ -44,18 +49,18 @@ export default function Command() {
     data: result,
     error,
   } = useCachedPromise(
-    async (type: string, pageNum: number) => {
+    async (type: string, pageNum: number, uname: string) => {
       return getUserCollections({
-        username,
+        username: uname,
         type: parseInt(type),
         limit: LIMIT,
         offset: (pageNum - 1) * LIMIT,
       });
     },
-    [collectionType, page],
+    [collectionType, page, username as string],
     {
       keepPreviousData: true,
-      execute: !!accessToken && !!username,
+      execute: authenticated && !!username,
     },
   );
 
@@ -80,7 +85,7 @@ export default function Command() {
     setPage(totalPages);
   }
 
-  const showContent = accessToken && username && !error;
+  const showContent = authenticated && !!username && !error;
 
   return (
     <List
@@ -102,28 +107,21 @@ export default function Command() {
         </List.Dropdown>
       }
     >
-      {!accessToken && (
-        <List.EmptyView
-          title="未配置 Access Token"
-          description="请在扩展偏好设置中填入 Bangumi Access Token"
-        />
+      {!authenticated && (loginFailed
+        ? <LoginPrompt onLogin={handleLogin} message="登录失败，请检查网络后重试" />
+        : <LoginLoading />
       )}
-      {accessToken && !username && (
-        <List.EmptyView
-          title="未配置用户名"
-          description="请在扩展偏好设置中填入你的 Bangumi 用户名"
-        />
-      )}
-      {error && (
+      {authenticated && !username && <LoginLoading />}
+      {authenticated && username && error && (
         <List.EmptyView title="加载失败" description={error.message} />
       )}
-      {!isLoading && showContent && collections.length === 0 && page === 1 && (
+      {authenticated && username && !error && !isLoading && collections.length === 0 && page === 1 && (
         <List.EmptyView
           title="暂无数据"
           description={`没有${typeLabel}条目`}
         />
       )}
-      {!isLoading && showContent && collections.length === 0 && page > 1 && (
+      {authenticated && username && !error && !isLoading && collections.length === 0 && page > 1 && (
         <List.EmptyView
           title="翻过头了"
           description={`第 ${page} 页无数据，共 ${totalPages} 页`}
