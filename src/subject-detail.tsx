@@ -58,7 +58,6 @@ export function SubjectDetail({ id }: Props) {
           <ActionPanel.Section>
             <Action.OpenInBrowser
               title="在 Bangumi 中打开"
-              shortcut={{ key: "enter", modifiers: ["cmd"] }}
               url={`https://bgm.tv/subject/${id}`}
             />
             <Action.CopyToClipboard
