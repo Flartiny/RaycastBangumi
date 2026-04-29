@@ -37,32 +37,24 @@ export function SubjectDetail({ id }: Props) {
         <Detail.Metadata>
           {subject && (
             <>
-              <Detail.Metadata.Label title="名称" text={subject.name_cn || subject.name} />
+              <Detail.Metadata.Label title="名称" text={truncate(subject.name_cn || subject.name, 20)} />
               {subject.name_cn && (
-                <Detail.Metadata.Label title="原文" text={subject.name} />
+                <Detail.Metadata.Label title="原文" text={truncate(subject.name, 20)} />
               )}
+              <Detail.Metadata.Label title="评分" text={formatScore(subject.rating?.score)} />
+              <Detail.Metadata.Label title="排名" text={subject.rank ? `#${subject.rank}` : "暂无"} />
               <Detail.Metadata.Label
                 title="类型"
                 text={SubjectTypeLabel[subject.type] || `#${subject.type}`}
               />
-              <Detail.Metadata.Label
-                title="评分"
-                text={subject.rating?.score?.toFixed(1) ?? "暂无"}
-              />
-              <Detail.Metadata.Label
-                title="评分人数"
-                text={String(subject.rating?.total ?? 0)}
-              />
-              <Detail.Metadata.Label
-                title="排名"
-                text={subject.rank ? `#${subject.rank}` : "暂无"}
-              />
-              {subject.date && (
-                <Detail.Metadata.Label title="日期" text={subject.date} />
-              )}
+              {subject.date && <Detail.Metadata.Label title="日期" text={subject.date} />}
               {subject.eps > 0 && (
                 <Detail.Metadata.Label title="话数" text={String(subject.eps)} />
               )}
+              <Detail.Metadata.Label
+                title="评分人数"
+                text={formatCount(subject.rating?.total)}
+              />
               {subject.tags && subject.tags.length > 0 && (
                 <Detail.Metadata.TagList title="标签">
                   {subject.tags.slice(0, 6).map((t) => (
@@ -97,15 +89,13 @@ function buildMarkdown(
 ): string {
   const lines: string[] = [];
 
-  // Cover image
   if (subject?.images?.large) {
     lines.push(
-      `![${subject.name_cn || subject.name}](${subject.images.large}?raycast-width=320)`,
+      `![${subject.name_cn || subject.name}](${subject.images.large}?raycast-width=380)`,
     );
     lines.push("");
   }
 
-  // Summary
   if (subject?.summary) {
     lines.push("## 简介");
     lines.push("");
@@ -113,7 +103,6 @@ function buildMarkdown(
     lines.push("");
   }
 
-  // Staff
   const staffLines = buildStaffSection(persons);
   if (staffLines.length > 1) {
     lines.push("## Staff");
@@ -122,7 +111,6 @@ function buildMarkdown(
     lines.push("");
   }
 
-  // Cast
   const castLines = buildCastSection(characters);
   if (castLines.length > 1) {
     lines.push("## 角色 / Cast");
@@ -164,4 +152,19 @@ function buildCastSection(characters: RelatedCharacter[] | null): string[] {
     }
   }
   return lines;
+}
+
+function truncate(text: string, max: number): string {
+  return text.length > max ? text.slice(0, max) + "…" : text;
+}
+
+function formatScore(score: number | undefined): string {
+  if (score === undefined || score === null) return "暂无";
+  return `${score.toFixed(1)} / 10`;
+}
+
+function formatCount(n: number | undefined): string {
+  if (n === undefined || n === null) return "暂无";
+  if (n >= 10000) return `${(n / 10000).toFixed(1)}万`;
+  return String(n);
 }
