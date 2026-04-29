@@ -150,6 +150,19 @@ export interface PersonInfo {
   images?: PersonImages;
 }
 
+export interface Episode {
+  id: number;
+  subject_id: number;
+  name: string;
+  name_cn: string;
+  type: number;
+  sort: number;
+  ep: number;
+  airdate: string;
+  duration: string;
+  status: string;
+}
+
 export interface RelatedCharacter {
   id: number;
   name: string;

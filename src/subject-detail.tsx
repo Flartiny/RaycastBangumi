@@ -1,10 +1,12 @@
 import { Action, ActionPanel, Detail, confirmAlert, getPreferenceValues } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
 import {
+  getEpisodes,
   getSubject,
   getSubjectCharacters,
   getSubjectPersons,
   getUserCollection,
+  patchSubjectEpisodes,
   postUserCollection,
 } from "./api/client";
 import { getUsername } from "./oauth";
@@ -49,6 +51,17 @@ export function SubjectDetail({ id }: Props) {
     [id],
     { keepPreviousData: true },
   );
+  const { data: episodeData } = useCachedPromise(
+    async (subjectId: number) => {
+      try {
+        return await getEpisodes(subjectId);
+      } catch {
+        return null;
+      }
+    },
+    [id],
+    { keepPreviousData: true },
+  );
 
   const isLoading = loadingSubject || loadingPersons || loadingChars;
   const markdown = buildMarkdown(subject ?? null, persons ?? null, characters ?? null);
@@ -56,9 +69,32 @@ export function SubjectDetail({ id }: Props) {
   const currentType = collection?.type;
   const currentEp = collection?.ep_status ?? 0;
   const totalEp = subject?.total_episodes ?? 0;
+  // Episodes sorted by sort order; used to map ep_status index to episode ID
+  const sortedEpisodes = episodeData?.data?.slice().sort((a, b) => a.sort - b.sort) ?? [];
 
-  async function mutateCollection(data: { type?: number; ep_status?: number }) {
+  async function mutateCollection(data: { type?: number }) {
     await postUserCollection(id, data);
+    await revalidateCollection();
+  }
+
+  /** Mark a single episode at the given progress index as watched (type=2) */
+  async function markEpisodeWatched(epIndex: number) {
+    if (epIndex < 0 || epIndex >= sortedEpisodes.length) return;
+    const episodeId = sortedEpisodes[epIndex].id;
+    try {
+      await patchSubjectEpisodes(id, { episode_id: [episodeId], type: 2 });
+    } catch (e) {
+      // Retry once for the known "first mark" 500 bug
+      await patchSubjectEpisodes(id, { episode_id: [episodeId], type: 2 });
+    }
+    await revalidateCollection();
+  }
+
+  /** Mark a single episode at the given progress index as unwatched (type=0) */
+  async function markEpisodeUnwatched(epIndex: number) {
+    if (epIndex < 0 || epIndex >= sortedEpisodes.length) return;
+    const episodeId = sortedEpisodes[epIndex].id;
+    await patchSubjectEpisodes(id, { episode_id: [episodeId], type: 0 });
     await revalidateCollection();
   }
 
@@ -66,12 +102,17 @@ export function SubjectDetail({ id }: Props) {
     if (type === 2 && totalEp > 0 && preferences.confirmProgressUpdate) {
       const shouldUpdate = await confirmAlert({
         title: "更新观看进度？",
-        message: `是否将观看进度同步更新为 ${totalEp} 集？`,
+        message: `是否将所有剧集标记为已看（共 ${totalEp} 集）？`,
         primaryAction: { title: "更新" },
         dismissAction: { title: "暂不更新" },
       });
       if (shouldUpdate) {
-        await mutateCollection({ type, ep_status: totalEp });
+        // Set type first (ensures collection exists for episode API)
+        await mutateCollection({ type });
+        const episodeIds = sortedEpisodes.map((e) => e.id);
+        if (episodeIds.length > 0) {
+          await patchSubjectEpisodes(id, { episode_id: episodeIds, type: 2 });
+        }
         return;
       }
     }
@@ -79,19 +120,17 @@ export function SubjectDetail({ id }: Props) {
   }
 
   async function handleDecrementProgress() {
-    const newEp = Math.max(0, currentEp - 1);
-    if (currentType !== 3) {
-      await mutateCollection({ type: 3, ep_status: newEp });
-    } else {
-      await mutateCollection({ ep_status: newEp });
+    const targetIdx = currentEp - 1; // last watched episode → unwatch
+    if (collection) {
+      await markEpisodeUnwatched(targetIdx);
     }
   }
 
   async function handleIncrementProgress() {
-    const newEp = currentEp + 1;
+    const targetIdx = currentEp; // next episode → watch
 
-    // Not watching: ask before switching (or skip entirely if pref is off)
-    if (currentType !== 3) {
+    // Not collected or not watching: need to ensure type=3 first
+    if (!collection || currentType !== 3) {
       if (preferences.confirmBeforeWatching) {
         const confirmed = await confirmAlert({
           title: "切换到「在看」？",
@@ -100,35 +139,35 @@ export function SubjectDetail({ id }: Props) {
           dismissAction: { title: "取消" },
         });
         if (!confirmed) return;
-        await mutateCollection({ type: 3, ep_status: newEp });
-      } else {
-        // Don't ask, don't switch status — just update progress
-        await mutateCollection({ ep_status: newEp });
       }
-      return;
+      // Create/update collection to type=3
+      if (!collection) {
+        await postUserCollection(id, { type: 3 });
+      } else {
+        await mutateCollection({ type: 3 });
+      }
     }
 
-    // Already watching: check if reached total
-    if (newEp >= totalEp) {
-      if (preferences.autoMarkWatched) {
-        await mutateCollection({ type: 2, ep_status: newEp });
-      } else {
-        const markWatched = await confirmAlert({
-          title: "标记为「看过」？",
-          message: `观看进度已达 ${totalEp} 集（总集数），是否标记为「看过」？`,
-          primaryAction: { title: "标记" },
-          dismissAction: { title: "暂不" },
-        });
-        if (markWatched) {
-          await mutateCollection({ type: 2, ep_status: newEp });
-        } else {
-          await mutateCollection({ ep_status: newEp });
-        }
-      }
-      return;
-    }
+    // Now mark the next episode as watched
+    const reachedTotal = targetIdx + 1 >= totalEp;
 
-    await mutateCollection({ ep_status: newEp });
+    if (reachedTotal && preferences.autoMarkWatched) {
+      await markEpisodeWatched(targetIdx);
+      await mutateCollection({ type: 2 });
+    } else if (reachedTotal && currentType === 3) {
+      const markWatched = await confirmAlert({
+        title: "标记为「看过」？",
+        message: `观看进度已达 ${totalEp} 集（总集数），是否标记为「看过」？`,
+        primaryAction: { title: "标记" },
+        dismissAction: { title: "暂不" },
+      });
+      await markEpisodeWatched(targetIdx);
+      if (markWatched) {
+        await mutateCollection({ type: 2 });
+      }
+    } else {
+      await markEpisodeWatched(targetIdx);
+    }
   }
 
   return (

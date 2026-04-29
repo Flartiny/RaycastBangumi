@@ -1,6 +1,7 @@
 import { getAccessToken } from "../oauth";
 import type {
   CalendarItem,
+  Episode,
   PagedResponse,
   RelatedCharacter,
   RelatedPerson,
@@ -113,7 +114,6 @@ export async function postUserCollection(
     comment?: string;
     tags?: string[];
     private?: boolean;
-    ep_status?: number;
   },
 ): Promise<void> {
   await request(`/v0/users/-/collections/${subjectId}`, {
@@ -145,4 +145,23 @@ export async function getSubjectCharacters(
   subjectId: number,
 ): Promise<RelatedCharacter[]> {
   return request<RelatedCharacter[]>(`/v0/subjects/${subjectId}/characters`);
+}
+
+/** GET /v0/episodes — 获取条目剧集列表 */
+export async function getEpisodes(subjectId: number): Promise<PagedResponse<Episode>> {
+  return request<PagedResponse<Episode>>(
+    `/v0/episodes?subject_id=${subjectId}&limit=200`,
+  );
+}
+
+/** PATCH /v0/users/-/collections/{subject_id}/episodes — 批量更新剧集收藏状态 */
+export async function patchSubjectEpisodes(
+  subjectId: number,
+  data: { episode_id: number[]; type: number },
+): Promise<void> {
+  await request(`/v0/users/-/collections/${subjectId}/episodes`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
 }
