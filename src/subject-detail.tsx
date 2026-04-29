@@ -91,6 +91,33 @@ export function SubjectDetail({ id }: Props) {
 
   async function commitProgress() {
     if (!isDirty || targetEp === null) return;
+
+    // Ensure subject is collected as "在看" (required by API before updating episodes)
+    if (!collection) {
+      // Never collected — always ask
+      const confirmed = await confirmAlert({
+        title: "收藏并切换到「在看」？",
+        message: "更新观看进度需要先将条目以「在看」状态收藏",
+        primaryAction: { title: "收藏" },
+        dismissAction: { title: "取消" },
+      });
+      if (!confirmed) return;
+      await postUserCollection(id, { type: 3 });
+      await revalidateCollection();
+    } else if (currentType !== 3) {
+      // Already collected but not watching
+      if (preferences.confirmBeforeWatching) {
+        const confirmed = await confirmAlert({
+          title: "切换到「在看」？",
+          message: `当前收藏状态为「${CollectionTypeLabel[currentType as CollectionType] || "其他"}」，需要切换到「在看」才能更新进度`,
+          primaryAction: { title: "切换" },
+          dismissAction: { title: "取消" },
+        });
+        if (!confirmed) return;
+      }
+      await mutateCollection({ type: 3 });
+    }
+
     const from = Math.min(currentEp, targetEp);
     const to = Math.max(currentEp, targetEp);
 

@@ -50,8 +50,8 @@
   "preferences": [
     {
       "name": "confirmBeforeWatching",
-      "title": "切换在看确认",
-      "description": "调整进度时，若当前不在「在看」状态，先询问是否切换到「在看」",
+      "title": "切换到在看确认",
+      "description": "已收藏但非「在看」时，调整进度前询问是否切换到「在看」。未收藏时始终询问。",
       "type": "checkbox",
       "required": false,
       "default": true,
