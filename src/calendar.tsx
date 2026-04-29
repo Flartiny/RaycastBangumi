@@ -92,7 +92,7 @@ export default function Command() {
                 {!isToday && (
                   <Action
                     title="回到今天"
-                    shortcut={{ key: "arrowUp", modifiers: [] }}
+                    shortcut={{ key: "home", modifiers: [] }}
                     onAction={() => setCurrentDay(today)}
                   />
                 )}
@@ -201,7 +201,7 @@ function CalendarSubjectItem({
             {!isToday && (
               <Action
                 title="回到今天"
-                shortcut={{ key: "arrowUp", modifiers: [] }}
+                shortcut={{ key: "home", modifiers: [] }}
                 onAction={onToday}
               />
             )}
