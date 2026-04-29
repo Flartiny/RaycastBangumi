@@ -1,7 +1,8 @@
+import { useState } from "react";
 import { Action, ActionPanel, Color, Image, List } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
 import { getCalendar } from "./api/client";
-import type { SubjectSmall } from "./api/types";
+import type { CalendarItem, SubjectSmall } from "./api/types";
 
 const WEEKDAY_CN: Record<number, string> = {
   1: "星期一",
@@ -13,13 +14,14 @@ const WEEKDAY_CN: Record<number, string> = {
   7: "星期日",
 };
 
-function getTodayWeekday(): number {
-  const day = new Date().getDay();
-  return day === 0 ? 7 : day; // JS: 0=Sun, Bangumi: 7=Sun
+function getTodayBangumiWeekday(): number {
+  const jsDay = new Date().getDay();
+  return jsDay === 0 ? 7 : jsDay;
 }
 
 export default function Command() {
-  const today = getTodayWeekday();
+  const today = getTodayBangumiWeekday();
+  const [currentDay, setCurrentDay] = useState<number>(today);
 
   const { isLoading, data: calendar } = useCachedPromise(
     getCalendar,
@@ -27,31 +29,88 @@ export default function Command() {
     { keepPreviousData: true },
   );
 
-  const items = calendar ?? [];
+  const dayMap = new Map<number, CalendarItem>();
+  if (calendar) {
+    for (const day of calendar) {
+      dayMap.set(day.weekday.id, day);
+    }
+  }
+
+  const currentDayData = dayMap.get(currentDay);
+  const isToday = currentDay === today;
+  const dayLabel = WEEKDAY_CN[currentDay];
+
+  function goNext() {
+    setCurrentDay((d) => (d >= 7 ? 1 : d + 1));
+  }
+
+  function goPrev() {
+    setCurrentDay((d) => (d <= 1 ? 7 : d - 1));
+  }
+
+  const subjects = currentDayData?.items ?? [];
 
   return (
-    <List isLoading={isLoading} searchBarPlaceholder="筛选番剧...">
-      {items.map((day) => {
-        const isToday = day.weekday.id === today;
-        return (
-          <List.Section
-            key={day.weekday.id}
-            title={`${day.weekday.cn}${isToday ? " · 今天" : ""}`}
-            subtitle={day.weekday.ja}
-          >
-            {day.items.length === 0 && (
-              <List.Item title="暂无放送" />
-            )}
-            {day.items.map((subject) => (
-              <CalendarSubjectItem
-                key={subject.id}
-                subject={subject}
-                isToday={isToday}
-              />
-            ))}
-          </List.Section>
-        );
-      })}
+    <List
+      isLoading={isLoading}
+      searchBarPlaceholder={`筛选${dayLabel}的番剧...`}
+      searchBarAccessory={
+        <List.Dropdown
+          tooltip="选择星期"
+          value={String(currentDay)}
+          onChange={(v) => setCurrentDay(Number(v))}
+        >
+          {[1, 2, 3, 4, 5, 6, 7].map((id) => (
+            <List.Dropdown.Item
+              key={id}
+              title={`${WEEKDAY_CN[id]}${id === today ? " · 今天" : ""}`}
+              value={String(id)}
+            />
+          ))}
+        </List.Dropdown>
+      }
+    >
+      <List.Section
+        title={`${dayLabel}${isToday ? " · 今天" : ""}`}
+        subtitle={currentDayData?.weekday.ja}
+      >
+        {subjects.length === 0 && !isLoading && (
+          <List.Item
+            title={isToday ? "今天暂无放送" : "暂无放送"}
+            actions={
+              <ActionPanel>
+                <Action
+                  title="前一天"
+                  shortcut={{ key: "arrowLeft", modifiers: [] }}
+                  onAction={goPrev}
+                />
+                <Action
+                  title="后一天"
+                  shortcut={{ key: "arrowRight", modifiers: [] }}
+                  onAction={goNext}
+                />
+                {!isToday && (
+                  <Action
+                    title="回到今天"
+                    shortcut={{ key: "arrowUp", modifiers: [] }}
+                    onAction={() => setCurrentDay(today)}
+                  />
+                )}
+              </ActionPanel>
+            }
+          />
+        )}
+        {subjects.map((subject) => (
+          <CalendarSubjectItem
+            key={subject.id}
+            subject={subject}
+            isToday={isToday}
+            onPrev={goPrev}
+            onNext={goNext}
+            onToday={() => setCurrentDay(today)}
+          />
+        ))}
+      </List.Section>
     </List>
   );
 }
@@ -59,9 +118,15 @@ export default function Command() {
 function CalendarSubjectItem({
   subject,
   isToday,
+  onPrev,
+  onNext,
+  onToday,
 }: {
   subject: SubjectSmall;
   isToday: boolean;
+  onPrev: () => void;
+  onNext: () => void;
+  onToday: () => void;
 }) {
   const rating = subject.rating?.score
     ? `★ ${subject.rating.score.toFixed(1)}`
@@ -98,7 +163,7 @@ function CalendarSubjectItem({
               )}
               <List.Item.Detail.Metadata.Label
                 title="放送日"
-                text={isToday ? `${WEEKDAY_CN[subject.air_weekday]} (今天)` : WEEKDAY_CN[subject.air_weekday] || ""}
+                text={WEEKDAY_CN[subject.air_weekday] || ""}
               />
               {subject.air_date && (
                 <List.Item.Detail.Metadata.Label title="首播日期" text={subject.air_date} />
@@ -122,6 +187,25 @@ function CalendarSubjectItem({
       }
       actions={
         <ActionPanel>
+          <ActionPanel.Section>
+            <Action
+              title="前一天"
+              shortcut={{ key: "arrowLeft", modifiers: [] }}
+              onAction={onPrev}
+            />
+            <Action
+              title="后一天"
+              shortcut={{ key: "arrowRight", modifiers: [] }}
+              onAction={onNext}
+            />
+            {!isToday && (
+              <Action
+                title="回到今天"
+                shortcut={{ key: "arrowUp", modifiers: [] }}
+                onAction={onToday}
+              />
+            )}
+          </ActionPanel.Section>
           <ActionPanel.Section>
             <Action.OpenInBrowser
               title="在 Bangumi 中打开"
