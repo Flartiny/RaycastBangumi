@@ -1,7 +1,7 @@
 {
   "$schema": "https://www.raycast.com/schemas/extension.json",
   "name": "bangumi",
-  "description": "Enjoy ACG with Bangumi",
+  "description": "Enjoy ACG with Bangumi - search, browse collections, and check daily broadcasts",
   "license": "MIT",
   "scripts": {
     "dev": "ray develop",
@@ -26,11 +26,43 @@
   "icon": "extension-icon.png",
   "commands": [
     {
-      "name": "bangumi",
-      "title": "Bangumi",
-      "description": "Open Bangumi in Raycast",
-      "mode": "no-view",
-      "subtitle": ""
+      "name": "search",
+      "title": "Search Bangumi",
+      "description": "Search subjects on Bangumi by keyword",
+      "mode": "view",
+      "subtitle": "Bangumi"
+    },
+    {
+      "name": "calendar",
+      "title": "Daily Broadcast",
+      "description": "View this week's daily broadcast schedule",
+      "mode": "view",
+      "subtitle": "Bangumi"
+    },
+    {
+      "name": "collections",
+      "title": "My Collections",
+      "description": "Browse your collections (Wish/Collect/Do)",
+      "mode": "view",
+      "subtitle": "Bangumi"
+    }
+  ],
+  "preferences": [
+    {
+      "name": "accessToken",
+      "title": "Access Token",
+      "description": "Bangumi API access token. Get one at https://next.bgm.tv/demo/access-token",
+      "type": "password",
+      "required": true,
+      "placeholder": "Paste your access token here"
+    },
+    {
+      "name": "username",
+      "title": "Username",
+      "description": "Your Bangumi username (used for collections API)",
+      "type": "textfield",
+      "required": false,
+      "placeholder": "your_bangumi_username"
     }
   ],
   "title": "Bangumi",
