@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Action, ActionPanel, Detail, confirmAlert, getPreferenceValues } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
 import {
@@ -69,36 +70,72 @@ export function SubjectDetail({ id }: Props) {
   const currentType = collection?.type;
   const currentEp = collection?.ep_status ?? 0;
   const totalEp = subject?.total_episodes ?? 0;
-  // Episodes sorted by sort order; used to map ep_status index to episode ID
   const sortedEpisodes = episodeData?.data?.slice().sort((a, b) => a.sort - b.sort) ?? [];
+
+  const [targetEp, setTargetEp] = useState<number | null>(null);
+  // The actual target: if user has adjusted, use targetEp; otherwise use currentEp
+  const displayTarget = targetEp ?? currentEp;
+  const isDirty = targetEp !== null && targetEp !== currentEp;
+
+  function adjustTarget(delta: number) {
+    setTargetEp((prev) => {
+      const base = prev ?? currentEp;
+      return Math.max(0, Math.min(totalEp, base + delta));
+    });
+  }
 
   async function mutateCollection(data: { type?: number }) {
     await postUserCollection(id, data);
     await revalidateCollection();
   }
 
-  /** Mark a single episode at the given progress index as watched (type=2) */
-  async function markEpisodeWatched(epIndex: number) {
-    if (epIndex < 0 || epIndex >= sortedEpisodes.length) return;
-    const episodeId = sortedEpisodes[epIndex].id;
-    try {
-      await patchSubjectEpisodes(id, { episode_id: [episodeId], type: 2 });
-    } catch (e) {
-      // Retry once for the known "first mark" 500 bug
-      await patchSubjectEpisodes(id, { episode_id: [episodeId], type: 2 });
-    }
-    await revalidateCollection();
-  }
+  async function commitProgress() {
+    if (!isDirty || targetEp === null) return;
+    const from = Math.min(currentEp, targetEp);
+    const to = Math.max(currentEp, targetEp);
 
-  /** Mark a single episode at the given progress index as unwatched (type=0) */
-  async function markEpisodeUnwatched(epIndex: number) {
-    if (epIndex < 0 || epIndex >= sortedEpisodes.length) return;
-    const episodeId = sortedEpisodes[epIndex].id;
-    await patchSubjectEpisodes(id, { episode_id: [episodeId], type: 0 });
+    if (targetEp > currentEp) {
+      // Mark episodes from currentEp to targetEp-1 as watched
+      if (from < to && from < sortedEpisodes.length) {
+        const ids = sortedEpisodes.slice(from, to).map((e) => e.id);
+        await patchSubjectEpisodes(id, { episode_id: ids, type: 2 });
+      }
+      // Handle reaching total
+      if (targetEp >= totalEp) {
+        if (preferences.autoMarkWatched) {
+          await mutateCollection({ type: 2 });
+        } else {
+          const markWatched = await confirmAlert({
+            title: "标记为「看过」？",
+            message: `观看进度已达 ${totalEp} 集（总集数），是否标记为「看过」？`,
+            primaryAction: { title: "标记" },
+            dismissAction: { title: "暂不" },
+          });
+          if (markWatched) {
+            await mutateCollection({ type: 2 });
+          }
+        }
+      }
+    } else if (targetEp < currentEp) {
+      // Unmark episodes from targetEp to currentEp-1
+      if (from < to && from < sortedEpisodes.length) {
+        const ids = sortedEpisodes.slice(from, to).map((e) => e.id);
+        await patchSubjectEpisodes(id, { episode_id: ids, type: 0 });
+      }
+    }
+
+    setTargetEp(null);
     await revalidateCollection();
   }
 
   async function handleSetCollectionType(type: CollectionType) {
+    // Ensure collection exists before progress operations
+    if (!collection) {
+      await postUserCollection(id, { type });
+      await revalidateCollection();
+      return;
+    }
+
     if (type === 2 && totalEp > 0 && preferences.confirmProgressUpdate) {
       const shouldUpdate = await confirmAlert({
         title: "更新观看进度？",
@@ -107,7 +144,6 @@ export function SubjectDetail({ id }: Props) {
         dismissAction: { title: "暂不更新" },
       });
       if (shouldUpdate) {
-        // Set type first (ensures collection exists for episode API)
         await mutateCollection({ type });
         const episodeIds = sortedEpisodes.map((e) => e.id);
         if (episodeIds.length > 0) {
@@ -116,59 +152,20 @@ export function SubjectDetail({ id }: Props) {
         return;
       }
     }
+
     await mutateCollection({ type });
   }
 
-  async function handleDecrementProgress() {
-    const targetIdx = currentEp - 1; // last watched episode → unwatch
-    if (collection) {
-      await markEpisodeUnwatched(targetIdx);
+  // Build progress display text
+  function progressText() {
+    if (totalEp <= 0) return null;
+    if (isDirty) {
+      return `${currentEp} → ${targetEp} / ${totalEp}`;
     }
+    return `${currentEp} / ${totalEp}`;
   }
 
-  async function handleIncrementProgress() {
-    const targetIdx = currentEp; // next episode → watch
-
-    // Not collected or not watching: need to ensure type=3 first
-    if (!collection || currentType !== 3) {
-      if (preferences.confirmBeforeWatching) {
-        const confirmed = await confirmAlert({
-          title: "切换到「在看」？",
-          message: "调整观看进度需要先将收藏状态切换为「在看」",
-          primaryAction: { title: "切换" },
-          dismissAction: { title: "取消" },
-        });
-        if (!confirmed) return;
-      }
-      // Create/update collection to type=3
-      if (!collection) {
-        await postUserCollection(id, { type: 3 });
-      } else {
-        await mutateCollection({ type: 3 });
-      }
-    }
-
-    // Now mark the next episode as watched
-    const reachedTotal = targetIdx + 1 >= totalEp;
-
-    if (reachedTotal && preferences.autoMarkWatched) {
-      await markEpisodeWatched(targetIdx);
-      await mutateCollection({ type: 2 });
-    } else if (reachedTotal && currentType === 3) {
-      const markWatched = await confirmAlert({
-        title: "标记为「看过」？",
-        message: `观看进度已达 ${totalEp} 集（总集数），是否标记为「看过」？`,
-        primaryAction: { title: "标记" },
-        dismissAction: { title: "暂不" },
-      });
-      await markEpisodeWatched(targetIdx);
-      if (markWatched) {
-        await mutateCollection({ type: 2 });
-      }
-    } else {
-      await markEpisodeWatched(targetIdx);
-    }
-  }
+  const progressLabel = progressText();
 
   return (
     <Detail
@@ -187,11 +184,8 @@ export function SubjectDetail({ id }: Props) {
                 title="收藏状态"
                 text={collection ? CollectionTypeLabel[collection.type] : "未收藏"}
               />
-              {totalEp > 0 && (
-                <Detail.Metadata.Label
-                  title="观看进度"
-                  text={collection ? `${collection.ep_status} / ${totalEp}` : `0 / ${totalEp}`}
-                />
+              {progressLabel && (
+                <Detail.Metadata.Label title="观看进度" text={progressLabel} />
               )}
             </>
           )}
@@ -199,6 +193,43 @@ export function SubjectDetail({ id }: Props) {
       }
       actions={
         <ActionPanel>
+          {isDirty && totalEp > 0 && (
+            <ActionPanel.Section>
+              <Action
+                title={`提交进度: ${currentEp}→${targetEp}/${totalEp}`}
+                onAction={commitProgress}
+              />
+            </ActionPanel.Section>
+          )}
+
+          <ActionPanel.Section>
+            <Action.CopyToClipboard
+              title="复制名称"
+              content={subject?.name_cn || subject?.name || ""}
+            />
+          </ActionPanel.Section>
+
+          {totalEp > 0 && (
+            <ActionPanel.Section title="观看进度">
+              {!isDirty && (
+                <Action
+                  title={`目标: ${targetEp ?? currentEp} / ${totalEp}`}
+                  onAction={commitProgress}
+                />
+              )}
+              <Action
+                title="−1 集"
+                shortcut={{ key: "arrowLeft", modifiers: [] }}
+                onAction={() => adjustTarget(-1)}
+              />
+              <Action
+                title="+1 集"
+                shortcut={{ key: "arrowRight", modifiers: [] }}
+                onAction={() => adjustTarget(1)}
+              />
+            </ActionPanel.Section>
+          )}
+
           <ActionPanel.Section title="收藏状态">
             <ActionPanel.Submenu
               title={collection ? `当前: ${CollectionTypeLabel[collection.type]}` : "标记收藏状态"}
@@ -213,31 +244,6 @@ export function SubjectDetail({ id }: Props) {
             </ActionPanel.Submenu>
           </ActionPanel.Section>
 
-          {totalEp > 0 && (
-            <ActionPanel.Section title="观看进度">
-              {currentEp > 0 && (
-                <Action
-                  title="上一集"
-                  shortcut={{ key: "arrowLeft", modifiers: [] }}
-                  onAction={handleDecrementProgress}
-                />
-              )}
-              {currentEp < totalEp && (
-                <Action
-                  title="下一集"
-                  shortcut={{ key: "arrowRight", modifiers: [] }}
-                  onAction={handleIncrementProgress}
-                />
-              )}
-            </ActionPanel.Section>
-          )}
-
-          <ActionPanel.Section>
-            <Action.CopyToClipboard
-              title="复制名称"
-              content={subject?.name_cn || subject?.name || ""}
-            />
-          </ActionPanel.Section>
           <ActionPanel.Section>
             <Action.OpenInBrowser
               title="在 Bangumi 中打开"
