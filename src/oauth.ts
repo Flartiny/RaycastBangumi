@@ -69,17 +69,27 @@ export async function getAccessToken(): Promise<string> {
   return token ?? "";
 }
 
-/** Start OAuth login flow. Automatically fetches and caches username on success. */
+/** Start OAuth login flow. Automatically retries on network errors. */
 export async function login(): Promise<boolean> {
-  try {
-    await bangumiOAuth.authorize();
-    // Fetch username in the background and cache it
-    fetchAndCacheUsername().catch(() => {});
-    return true;
-  } catch (error) {
-    console.error("OAuth login failed:", error);
-    return false;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      await bangumiOAuth.authorize();
+      fetchAndCacheUsername().catch(() => {});
+      return true;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "";
+      if (msg.includes("ConnectTimeoutError") || msg.includes("fetch failed")) {
+        console.error(`OAuth attempt ${attempt} failed:`, msg);
+        if (attempt < 3) {
+          await new Promise((r) => setTimeout(r, 2000));
+          continue;
+        }
+      }
+      console.error("OAuth login failed:", error);
+      return false;
+    }
   }
+  return false;
 }
 
 async function fetchAndCacheUsername() {
