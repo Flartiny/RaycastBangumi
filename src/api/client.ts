@@ -1,4 +1,5 @@
 import { getPreferenceValues } from "@raycast/api";
+import { getAccessToken } from "../oauth";
 import type {
   CalendarItem,
   PagedResponse,
@@ -17,14 +18,14 @@ interface Preferences {
 
 const BASE_URL = "https://api.bgm.tv";
 
-function getAuthHeaders(): Record<string, string> {
-  const { accessToken } = getPreferenceValues<Preferences>();
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  const token = await getAccessToken();
   const headers: Record<string, string> = {
     "User-Agent": "RaycastBangumi/1.0",
     Accept: "application/json",
   };
-  if (accessToken) {
-    headers["Authorization"] = `Bearer ${accessToken}`;
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
   }
   return headers;
 }
@@ -34,7 +35,8 @@ async function request<T>(
   options: RequestInit = {},
 ): Promise<T> {
   const url = `${BASE_URL}${path}`;
-  const headers = { ...getAuthHeaders(), ...(options.headers || {}) };
+  const authHeaders = await getAuthHeaders();
+  const headers = { ...authHeaders, ...(options.headers || {}) };
 
   const res = await fetch(url, { ...options, headers });
 
