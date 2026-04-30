@@ -102,7 +102,11 @@ export function getDisplayLabel(
   const { group, airedEp } = getCollectionMeta(c, airingMap, airedEpMap, today);
 
   if (group === "airing_caught") {
-    return airedEp > 0 ? `已看 ${airedEp}` : "等待更新";
+    const { weekday } = getCollectionMeta(c, airingMap, airedEpMap, today);
+    if (weekday === today) return "今日更新";
+    const tomorrow = today >= 7 ? 1 : today + 1;
+    if (weekday === tomorrow) return "明日更新";
+    return weekday > 0 ? `${WEEKDAY_CN[weekday].replace("星期", "周")}更新` : "等待更新";
   }
 
   if (group === "airing_not_caught" || (group === "finished" && c.ep_status > 0)) {
