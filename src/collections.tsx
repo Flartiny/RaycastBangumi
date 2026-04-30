@@ -76,6 +76,7 @@ export default function Command() {
     isLoading: loadingCollections,
     data: result,
     error,
+    revalidate: revalidateCollections,
   } = useCachedPromise(
     async (type: string, pageNum: number, uname: string) => {
       if (type === "3") {
@@ -100,6 +101,18 @@ export default function Command() {
 
   const rawCollections = result?.data ?? [];
   const apiTotal = result?.total ?? 0;
+
+  // Poll for stale-collections flag set by SubjectDetail after mutation
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const stale = await LocalStorage.getItem<string>("coll-stale");
+      if (stale === "1") {
+        await LocalStorage.removeItem("coll-stale");
+        revalidateCollections();
+      }
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [revalidateCollections]);
 
   const [airedEpMap, setAiredEpMap] = useState<Map<number, number>>(new Map());
   const [loadingEpisodes, setLoadingEpisodes] = useState(false);
@@ -158,7 +171,7 @@ export default function Command() {
       for (const r of results) {
         if (r.status === "fulfilled") {
           const { id, data } = r.value;
-          const airedCount = data.data.filter((ep) => ep.airdate && ep.airdate <= todayStr).length;
+          const airedCount = data.data.filter((ep) => ep.airdate && ep.airdate <= todayStr && ep.type === 0).length;
           map.set(id, airedCount);
         }
       }

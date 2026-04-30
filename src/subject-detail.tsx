@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Action, ActionPanel, Detail, Keyboard, confirmAlert, getPreferenceValues } from "@raycast/api";
+import { Action, ActionPanel, Detail, Keyboard, LocalStorage, confirmAlert, getPreferenceValues } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
 import {
   getEpisodes,
@@ -86,6 +86,7 @@ export function SubjectDetail({ id }: Props) {
 
   async function mutateCollection(data: { type?: number }) {
     await postUserCollection(id, data);
+    await LocalStorage.setItem("coll-stale", "1");
     await revalidateCollection();
   }
 
@@ -122,6 +123,7 @@ export function SubjectDetail({ id }: Props) {
       const ids = sortedEpisodes.slice(from, to).map((e) => e.id);
       if (ids.length === 0) return;
       await patchSubjectEpisodes(id, { episode_id: ids, type: epType });
+      await LocalStorage.setItem("coll-stale", "1");
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "";
       if (msg.includes("need to add subject")) {
