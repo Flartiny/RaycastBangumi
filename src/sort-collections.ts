@@ -15,28 +15,42 @@ function getTotalEp(c: UserCollection): number {
 
 export type SortedGroup = "airing_not_caught" | "finished" | "airing_caught";
 
-export function getCollectionMeta(c: UserCollection, airingMap: Map<number, number>, today: number) {
-  const weekday = airingMap.get(c.subject_id) ?? c.subject.air_weekday;
+export interface CollectionMeta {
+  group: SortedGroup;
+  weekday: number;
+  airedEp: number;
+}
+
+export function getCollectionMeta(
+  c: UserCollection,
+  airingMap: Map<number, number>,
+  airedEpMap: Map<number, number>,
+  today: number,
+): CollectionMeta {
+  const weekday = airingMap.get(c.subject_id) ?? c.subject.air_weekday ?? 0;
   const isAiring = airingMap.has(c.subject_id);
   const totalEp = getTotalEp(c);
-  const isCaughtUp = totalEp > 0 && c.ep_status >= totalEp;
+  const airedEp = isAiring ? (airedEpMap.get(c.subject_id) ?? totalEp) : totalEp;
 
   let group: SortedGroup;
-  if (isAiring && !isCaughtUp) {
+  if (isAiring && weekday === today) {
+    group = "airing_caught";
+  } else if (isAiring && c.ep_status < airedEp) {
     group = "airing_not_caught";
-  } else if (isAiring && isCaughtUp) {
+  } else if (isAiring && c.ep_status >= airedEp) {
     group = "airing_caught";
   } else {
     group = "finished";
   }
 
-  return { group, weekday: weekday ?? 0, today };
+  return { group, weekday, airedEp };
 }
 
 export function sortCollections(
   collections: UserCollection[],
   calendar: CalendarItem[],
   today: number,
+  airedEpMap: Map<number, number>,
 ): UserCollection[] {
   const airingMap = new Map<number, number>();
   for (const day of calendar) {
@@ -50,7 +64,7 @@ export function sortCollections(
   const groupIII: UserCollection[] = [];
 
   for (const c of collections) {
-    const { group } = getCollectionMeta(c, airingMap, today);
+    const { group } = getCollectionMeta(c, airingMap, airedEpMap, today);
 
     if (group === "airing_not_caught") {
       groupI.push(c);
@@ -79,12 +93,16 @@ export function sortCollections(
   return [...groupI, ...groupIIa, ...groupIIb, ...groupIII];
 }
 
-export function getDisplayLabel(c: UserCollection, airingMap: Map<number, number>, today: number): string | null {
-  const { group } = getCollectionMeta(c, airingMap, today);
+export function getDisplayLabel(
+  c: UserCollection,
+  airingMap: Map<number, number>,
+  airedEpMap: Map<number, number>,
+  today: number,
+): string | null {
+  const { group, airedEp } = getCollectionMeta(c, airingMap, airedEpMap, today);
 
   if (group === "airing_caught") {
-    const totalEp = getTotalEp(c);
-    return totalEp > 0 ? `已看 ${totalEp}` : "等待更新";
+    return airedEp > 0 ? `已看 ${airedEp}` : "等待更新";
   }
 
   if (group === "airing_not_caught" || (group === "finished" && c.ep_status > 0)) {

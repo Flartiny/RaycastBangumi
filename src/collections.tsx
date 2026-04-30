@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Action, ActionPanel, Color, Image, List } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
-import { getUserCollections, getAllUserCollections, getCalendar } from "./api/client";
+import { getUserCollections, getAllUserCollections, getCalendar, getEpisodes } from "./api/client";
 import { getUsername } from "./oauth";
 import { SubjectDetail } from "./subject-detail";
 import { useAuth } from "./hooks/useAuth";
@@ -87,6 +87,54 @@ export default function Command() {
   const rawCollections = result?.data ?? [];
   const apiTotal = result?.total ?? 0;
 
+  const [airedEpMap, setAiredEpMap] = useState<Map<number, number>>(new Map());
+
+  useEffect(() => {
+    if (!isWatching || !calendarData || rawCollections.length === 0) {
+      setAiredEpMap(new Map());
+      return;
+    }
+
+    const airingSet = new Set<number>();
+    for (const day of calendarData) {
+      for (const item of day.items) {
+        airingSet.add(item.id);
+      }
+    }
+
+    const airingIds = rawCollections
+      .filter((c) => airingSet.has(c.subject_id))
+      .map((c) => c.subject_id);
+
+    if (airingIds.length === 0) {
+      setAiredEpMap(new Map());
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      const results = await Promise.allSettled(
+        airingIds.map((id) => getEpisodes(id).then((data) => ({ id, data }))),
+      );
+
+      if (cancelled) return;
+
+      const map = new Map<number, number>();
+      const todayStr = new Date().toISOString().slice(0, 10);
+      for (const r of results) {
+        if (r.status === "fulfilled") {
+          const { id, data } = r.value;
+          const airedCount = data.data.filter((ep) => ep.airdate && ep.airdate <= todayStr).length;
+          map.set(id, airedCount);
+        }
+      }
+      setAiredEpMap(map);
+    })();
+
+    return () => { cancelled = true; };
+  }, [isWatching, calendarData, rawCollections]);
+  const episodeMap = airedEpMap;
+
   const today = getTodayBangumiWeekday();
 
   let sorted: UserCollection[];
@@ -97,7 +145,7 @@ export default function Command() {
         airingMap.set(item.id, day.weekday.id);
       }
     }
-    sorted = sortCollections(rawCollections, calendarData, today);
+    sorted = sortCollections(rawCollections, calendarData, today, episodeMap);
   } else {
     sorted = rawCollections;
   }
@@ -112,7 +160,7 @@ export default function Command() {
 
   const displayLabels = new Map<number, string | null>();
   for (const c of sorted) {
-    displayLabels.set(c.subject_id, getDisplayLabel(c, airingMap, today));
+    displayLabels.set(c.subject_id, getDisplayLabel(c, airingMap, episodeMap, today));
   }
 
   const typeLabel = CollectionTypeLabel[parseInt(collectionType) as CollectionType];
