@@ -8,6 +8,7 @@ import { useAuth } from "./hooks/useAuth";
 import { LoginLoading, LoginPrompt } from "./components/LoginPrompt";
 import { CollectionTypeLabel, SubjectTypeLabel } from "./api/types";
 import { sortCollections, getDisplayLabel, getTodayBangumiWeekday, WEEKDAY_CN } from "./sort-collections";
+import { onCollectionsChanged } from "./events";
 import type { CollectionType, UserCollection } from "./api/types";
 
 const LIMIT = 20;
@@ -77,13 +78,21 @@ export default function Command() {
 
   const calendarData = calendar ?? null;
 
+  const [revalidateKey, setRevalidateKey] = useState(0);
+
+  // Listen for collection changes from SubjectDetail
+  useEffect(() => {
+    return onCollectionsChanged(() => {
+      setRevalidateKey((k) => k + 1);
+    });
+  }, []);
+
   const {
     isLoading: loadingCollections,
     data: result,
     error,
-    revalidate: revalidateCollections,
   } = useCachedPromise(
-    async (type: string, pageNum: number, uname: string) => {
+    async (type: string, pageNum: number, _rk: number, uname: string) => {
       if (type === "3") {
         return getAllUserCollections({
           username: uname,
@@ -97,7 +106,7 @@ export default function Command() {
         offset: (pageNum - 1) * LIMIT,
       });
     },
-    [collectionType, page, username as string],
+    [collectionType, page, revalidateKey, username as string],
     {
       keepPreviousData: true,
       execute: authenticated && !!username,
@@ -106,18 +115,6 @@ export default function Command() {
 
   const rawCollections = result?.data ?? [];
   const apiTotal = result?.total ?? 0;
-
-  // Poll for stale-collections flag set by SubjectDetail after mutation
-  useEffect(() => {
-    const interval = setInterval(async () => {
-      const stale = await LocalStorage.getItem<string>("coll-stale");
-      if (stale === "1") {
-        await LocalStorage.removeItem("coll-stale");
-        revalidateCollections();
-      }
-    }, 2000);
-    return () => clearInterval(interval);
-  }, [revalidateCollections]);
 
   const [epInfoMap, setEpInfoMap] = useState<Map<number, EpInfo>>(new Map());
   const [loadingEpisodes, setLoadingEpisodes] = useState(false);
