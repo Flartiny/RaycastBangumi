@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { Action, ActionPanel, Color, Image, List } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
-import { getUserCollections } from "./api/client";
+import { getUserCollections, getCalendar } from "./api/client";
 import { getUsername } from "./oauth";
 import { SubjectDetail } from "./subject-detail";
 import { useAuth } from "./hooks/useAuth";
 import { LoginLoading, LoginPrompt } from "./components/LoginPrompt";
 import { CollectionTypeLabel, SubjectTypeLabel } from "./api/types";
+import { sortCollections, getDisplayLabel, getTodayBangumiWeekday, WEEKDAY_CN } from "./sort-collections";
 import type { CollectionType, UserCollection } from "./api/types";
 
 const LIMIT = 20;
@@ -34,6 +35,8 @@ export default function Command() {
   const [collectionType, setCollectionType] = useState("3");
   const [page, setPage] = useState(1);
 
+  const isWatching = collectionType === "3";
+
   useEffect(() => {
     if (authenticated) {
       getUsername().then((u) => setUsername(u || ""));
@@ -44,12 +47,31 @@ export default function Command() {
     setPage(1);
   }, [collectionType]);
 
+  const { isLoading: loadingCalendar, data: calendar } = useCachedPromise(
+    isWatching ? getCalendar : () => Promise.resolve(null),
+    [],
+    {
+      keepPreviousData: true,
+      execute: authenticated && !!username && isWatching,
+    },
+  );
+
+  const calendarData = calendar ?? null;
+
   const {
-    isLoading,
+    isLoading: loadingCollections,
     data: result,
     error,
   } = useCachedPromise(
     async (type: string, pageNum: number, uname: string) => {
+      if (type === "3") {
+        return getUserCollections({
+          username: uname,
+          type: 3,
+          limit: 200,
+          offset: 0,
+        });
+      }
       return getUserCollections({
         username: uname,
         type: parseInt(type),
@@ -64,9 +86,37 @@ export default function Command() {
     },
   );
 
-  const collections = result?.data ?? [];
-  const total = result?.total ?? 0;
-  const totalPages = Math.max(1, Math.ceil(total / LIMIT));
+  const rawCollections = result?.data ?? [];
+  const apiTotal = result?.total ?? 0;
+
+  const today = getTodayBangumiWeekday();
+
+  let sorted: UserCollection[];
+  let airingMap = new Map<number, number>();
+  if (isWatching && calendarData) {
+    for (const day of calendarData) {
+      for (const item of day.items) {
+        airingMap.set(item.id, day.weekday.id);
+      }
+    }
+    sorted = sortCollections(rawCollections, calendarData, today);
+  } else {
+    sorted = rawCollections;
+  }
+
+  const totalPages = isWatching
+    ? Math.max(1, Math.ceil(sorted.length / LIMIT))
+    : Math.max(1, Math.ceil(apiTotal / LIMIT));
+
+  const pageCollections = isWatching
+    ? sorted.slice((page - 1) * LIMIT, page * LIMIT)
+    : sorted;
+
+  const displayLabels = new Map<number, string | null>();
+  for (const c of sorted) {
+    displayLabels.set(c.subject_id, getDisplayLabel(c, airingMap, today));
+  }
+
   const typeLabel = CollectionTypeLabel[parseInt(collectionType) as CollectionType];
 
   function goNext() {
@@ -86,6 +136,7 @@ export default function Command() {
   }
 
   const showContent = authenticated && !!username && !error;
+  const isLoading = isWatching ? loadingCollections || loadingCalendar : loadingCollections;
 
   return (
     <List
@@ -115,13 +166,13 @@ export default function Command() {
       {authenticated && username && error && (
         <List.EmptyView title="加载失败" description={error.message} />
       )}
-      {authenticated && username && !error && !isLoading && collections.length === 0 && page === 1 && (
+      {authenticated && username && !error && !isLoading && pageCollections.length === 0 && page === 1 && (
         <List.EmptyView
           title="暂无数据"
           description={`没有${typeLabel}条目`}
         />
       )}
-      {authenticated && username && !error && !isLoading && collections.length === 0 && page > 1 && (
+      {authenticated && username && !error && !isLoading && pageCollections.length === 0 && page > 1 && (
         <List.EmptyView
           title="翻过头了"
           description={`第 ${page} 页无数据，共 ${totalPages} 页`}
@@ -143,9 +194,9 @@ export default function Command() {
       )}
       {showContent && (
         <List.Section
-          title={`${typeLabel} · 第 ${page} / ${totalPages} 页 · 共 ${total} 条`}
+          title={`${typeLabel} · 第 ${page} / ${totalPages} 页 · 共 ${sorted.length} 条`}
         >
-          {collections.map((item) => (
+          {pageCollections.map((item) => (
             <CollectionListItem
               key={item.subject_id}
               collection={item}
@@ -155,6 +206,8 @@ export default function Command() {
               onNext={goNext}
               onFirst={goFirst}
               onLast={goLast}
+              showProgressLabel={isWatching}
+              displayLabel={displayLabels.get(item.subject_id) ?? null}
             />
           ))}
         </List.Section>
@@ -171,6 +224,8 @@ function CollectionListItem({
   onNext,
   onFirst,
   onLast,
+  showProgressLabel,
+  displayLabel,
 }: {
   collection: UserCollection;
   page: number;
@@ -179,11 +234,27 @@ function CollectionListItem({
   onNext: () => void;
   onFirst: () => void;
   onLast: () => void;
+  showProgressLabel: boolean;
+  displayLabel: string | null;
 }) {
   const subject = collection.subject;
   const typeLabel = SubjectTypeLabel[subject.type] || "未知";
   const rateText = collection.rate ? `★ ${collection.rate}` : "";
   const rateColor = collection.rate ? RATE_COLORS[collection.rate] : undefined;
+
+  const weekdayText = subject.air_weekday ? WEEKDAY_CN[subject.air_weekday] : undefined;
+
+  const accessories = [];
+  if (showProgressLabel && displayLabel) {
+    accessories.push({ tag: { value: displayLabel } });
+  }
+  if (rateText) {
+    accessories.push({ tag: { value: rateText, color: rateColor } });
+  }
+  if (weekdayText) {
+    accessories.push({ text: weekdayText });
+  }
+  accessories.push({ text: typeLabel });
 
   return (
     <List.Item
@@ -194,10 +265,7 @@ function CollectionListItem({
       }}
       title={subject.name_cn || subject.name}
       subtitle={subject.name_cn ? subject.name : undefined}
-      accessories={[
-        ...(rateText ? [{ tag: { value: rateText, color: rateColor } }] : []),
-        { text: typeLabel },
-      ]}
+      accessories={accessories}
       detail={
         <List.Item.Detail
           markdown={
@@ -241,7 +309,7 @@ function CollectionListItem({
               {collection.ep_status > 0 && (
                 <List.Item.Detail.Metadata.Label
                   title="观看进度"
-                  text={`${collection.ep_status} / {subject.total_episodes || subject.eps || "?"}`}
+                  text={`${collection.ep_status} / ${subject.total_episodes || subject.eps || "?"}`}
                 />
               )}
               {collection.comment && (

@@ -43,6 +43,7 @@ export interface Subject {
   rating: Rating;
   rank: number;
   date: string;
+  air_weekday?: number;
   tags?: SubjectTag[];
 }
 
