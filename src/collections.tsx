@@ -29,6 +29,11 @@ const RATE_COLORS: Record<number, Color> = {
   5: Color.Green,
 };
 
+interface EpInfo {
+  aired: number;
+  total: number;
+}
+
 export default function Command() {
   const { authLoading, authenticated, loginFailed, handleLogin } = useAuth({ autoLogin: true });
   const [username, setUsername] = useState<string | null>(null);
@@ -40,13 +45,13 @@ export default function Command() {
   // Clear expired episode caches on mount
   useEffect(() => {
     (async () => {
-      const expiry = await LocalStorage.getItem<string>("bangumi-episodes-expiry");
+      const expiry = await LocalStorage.getItem<string>("bgm-eps-expiry");
       if (expiry && Date.now() >= Number(expiry)) {
         const all = await LocalStorage.allItems();
         for (const key of Object.keys(all)) {
-          if (key.startsWith("bangumi-episodes-")) await LocalStorage.removeItem(key);
+          if (key.startsWith("bgm-eps-v2-")) await LocalStorage.removeItem(key);
         }
-        await LocalStorage.removeItem("bangumi-episodes-expiry");
+        await LocalStorage.removeItem("bgm-eps-expiry");
       }
     })();
   }, []);
@@ -114,13 +119,12 @@ export default function Command() {
     return () => clearInterval(interval);
   }, [revalidateCollections]);
 
-  const [airedEpMap, setAiredEpMap] = useState<Map<number, number>>(new Map());
+  const [epInfoMap, setEpInfoMap] = useState<Map<number, EpInfo>>(new Map());
   const [loadingEpisodes, setLoadingEpisodes] = useState(false);
 
   useEffect(() => {
-    // Reset episode map when not watching
     if (!isWatching || !calendarData || rawCollections.length === 0) {
-      setAiredEpMap(new Map());
+      setEpInfoMap(new Map());
       setLoadingEpisodes(false);
       return;
     }
@@ -136,23 +140,21 @@ export default function Command() {
       .filter((c) => airingSet.has(c.subject_id))
       .map((c) => c.subject_id);
 
-    // Use a key derived from sorted IDs for stable cache comparison
     const key = airingIds.sort((a, b) => a - b).join(",");
 
     setLoadingEpisodes(true);
     let cancelled = false;
 
     (async () => {
-      // Check LocalStorage cache (valid until midnight)
-      const expiry = await LocalStorage.getItem<string>("bangumi-episodes-expiry");
+      const expiry = await LocalStorage.getItem<string>("bgm-eps-expiry");
       const now = Date.now();
       if (expiry && now < Number(expiry)) {
-        const cached = await LocalStorage.getItem<string>(`bangumi-episodes-${key}`);
+        const cached = await LocalStorage.getItem<string>(`bgm-eps-v2-${key}`);
         if (cached) {
           try {
-            const parsed = JSON.parse(cached) as [number, number][];
+            const parsed = JSON.parse(cached) as [number, EpInfo][];
             if (!cancelled) {
-              setAiredEpMap(new Map(parsed));
+              setEpInfoMap(new Map(parsed));
               setLoadingEpisodes(false);
             }
             return;
@@ -166,31 +168,37 @@ export default function Command() {
 
       if (cancelled) return;
 
-      const map = new Map<number, number>();
+      const map = new Map<number, EpInfo>();
       const todayStr = new Date().toISOString().slice(0, 10);
       for (const r of results) {
         if (r.status === "fulfilled") {
           const { id, data } = r.value;
-          const airedCount = data.data.filter((ep) => ep.airdate && ep.airdate <= todayStr && ep.type === 0).length;
-          map.set(id, airedCount);
+          const mainEps = data.data.filter((ep) => ep.type === 0);
+          const airedCount = mainEps.filter((ep) => ep.airdate && ep.airdate <= todayStr).length;
+          map.set(id, { aired: airedCount, total: mainEps.length });
         }
       }
 
-      // Cache until midnight
       const midnight = new Date();
       midnight.setHours(24, 0, 0, 0);
-      await LocalStorage.setItem(`bangumi-episodes-${key}`, JSON.stringify([...map]));
-      await LocalStorage.setItem("bangumi-episodes-expiry", String(midnight.getTime()));
+      await LocalStorage.setItem(`bgm-eps-v2-${key}`, JSON.stringify([...map]));
+      await LocalStorage.setItem("bgm-eps-expiry", String(midnight.getTime()));
 
       if (!cancelled) {
-        setAiredEpMap(map);
+        setEpInfoMap(map);
         setLoadingEpisodes(false);
       }
     })();
 
     return () => { cancelled = true; };
   }, [isWatching, calendarData, rawCollections]);
-  const episodeMap = airedEpMap;
+
+  const airedEpMap = new Map<number, number>();
+  const mainTotalEpMap = new Map<number, number>();
+  for (const [id, info] of epInfoMap) {
+    airedEpMap.set(id, info.aired);
+    mainTotalEpMap.set(id, info.total);
+  }
 
   const today = getTodayBangumiWeekday();
 
@@ -202,7 +210,7 @@ export default function Command() {
         airingMap.set(item.id, day.weekday.id);
       }
     }
-    sorted = sortCollections(rawCollections, calendarData, today, episodeMap);
+    sorted = sortCollections(rawCollections, calendarData, today, airedEpMap);
   } else {
     sorted = rawCollections;
   }
@@ -217,7 +225,7 @@ export default function Command() {
 
   const displayLabels = new Map<number, string | null>();
   for (const c of sorted) {
-    displayLabels.set(c.subject_id, getDisplayLabel(c, airingMap, episodeMap, today));
+    displayLabels.set(c.subject_id, getDisplayLabel(c, airingMap, airedEpMap, today));
   }
 
   const typeLabel = CollectionTypeLabel[parseInt(collectionType) as CollectionType];
@@ -313,6 +321,7 @@ export default function Command() {
               onLast={goLast}
               showProgressLabel={isWatching}
               displayLabel={displayLabels.get(item.subject_id) ?? null}
+              mainTotalEp={mainTotalEpMap.get(item.subject_id)}
             />
           ))}
         </List.Section>
@@ -331,6 +340,7 @@ function CollectionListItem({
   onLast,
   showProgressLabel,
   displayLabel,
+  mainTotalEp,
 }: {
   collection: UserCollection;
   page: number;
@@ -341,6 +351,7 @@ function CollectionListItem({
   onLast: () => void;
   showProgressLabel: boolean;
   displayLabel: string | null;
+  mainTotalEp?: number;
 }) {
   const subject = collection.subject;
   const typeLabel = SubjectTypeLabel[subject.type] || "未知";
@@ -348,6 +359,8 @@ function CollectionListItem({
   const rateColor = collection.rate ? RATE_COLORS[collection.rate] : undefined;
 
   const weekdayText = subject.air_weekday ? WEEKDAY_CN[subject.air_weekday] : undefined;
+
+  const totalEp = mainTotalEp ?? subject.eps ?? subject.total_episodes ?? 0;
 
   const accessories = [];
   if (showProgressLabel && displayLabel) {
@@ -414,7 +427,7 @@ function CollectionListItem({
               {collection.ep_status > 0 && (
                 <List.Item.Detail.Metadata.Label
                   title="观看进度"
-                  text={`${collection.ep_status} / ${subject.total_episodes || subject.eps || "?"}`}
+                  text={`${collection.ep_status} / ${totalEp || "?"}`}
                 />
               )}
               {collection.comment && (
