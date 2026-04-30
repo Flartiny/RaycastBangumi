@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Action, ActionPanel, Color, Image, List, LocalStorage } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
 import { getUserCollections, getAllUserCollections, getCalendar, getEpisodes } from "./api/client";
@@ -8,7 +8,6 @@ import { useAuth } from "./hooks/useAuth";
 import { LoginLoading, LoginPrompt } from "./components/LoginPrompt";
 import { CollectionTypeLabel, SubjectTypeLabel } from "./api/types";
 import { sortCollections, getDisplayLabel, getTodayBangumiWeekday, WEEKDAY_CN } from "./sort-collections";
-import { onCollectionsChanged } from "./events";
 import type { CollectionType, UserCollection } from "./api/types";
 
 const LIMIT = 20;
@@ -107,16 +106,6 @@ export default function Command() {
 
   const rawCollections = result?.data ?? [];
   const apiTotal = result?.total ?? 0;
-
-  // Listen for collection changes from SubjectDetail
-  const revalidateRef = useRef(revalidateCollections);
-  revalidateRef.current = revalidateCollections;
-
-  useEffect(() => {
-    return onCollectionsChanged(() => {
-      revalidateRef.current();
-    });
-  }, []);
 
   const [epInfoMap, setEpInfoMap] = useState<Map<number, EpInfo>>(new Map());
   const [loadingEpisodes, setLoadingEpisodes] = useState(false);
@@ -321,6 +310,7 @@ export default function Command() {
               showProgressLabel={isWatching}
               displayLabel={displayLabels.get(item.subject_id) ?? null}
               mainTotalEp={mainTotalEpMap.get(item.subject_id)}
+              onPop={revalidateCollections}
             />
           ))}
         </List.Section>
@@ -340,6 +330,7 @@ function CollectionListItem({
   showProgressLabel,
   displayLabel,
   mainTotalEp,
+  onPop,
 }: {
   collection: UserCollection;
   page: number;
@@ -351,6 +342,7 @@ function CollectionListItem({
   showProgressLabel: boolean;
   displayLabel: string | null;
   mainTotalEp?: number;
+  onPop?: () => void;
 }) {
   const subject = collection.subject;
   const typeLabel = SubjectTypeLabel[subject.type] || "未知";
@@ -452,9 +444,8 @@ function CollectionListItem({
           <ActionPanel.Section>
             <Action.Push
               title="查看详情"
-              target={
-                <SubjectDetail id={subject.id} />
-              }
+              target={<SubjectDetail id={subject.id} />}
+              onPop={onPop}
             />
           </ActionPanel.Section>
           <ActionPanel.Section>

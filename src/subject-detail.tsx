@@ -12,7 +12,6 @@ import {
 } from "./api/client";
 import { getUsername } from "./oauth";
 import { CollectionTypeLabel } from "./api/types";
-import { emitCollectionsChanged } from "./events";
 import type { CollectionType, RelatedCharacter, RelatedPerson, Subject } from "./api/types";
 
 interface Preferences {
@@ -87,8 +86,7 @@ export function SubjectDetail({ id }: Props) {
 
   async function mutateCollection(data: { type?: number }) {
     await postUserCollection(id, data);
-    emitCollectionsChanged();
-    await revalidateCollection();
+        await revalidateCollection();
   }
 
   async function ensureCollected(): Promise<boolean> {
@@ -124,8 +122,7 @@ export function SubjectDetail({ id }: Props) {
       const ids = sortedEpisodes.slice(from, to).map((e) => e.id);
       if (ids.length === 0) return;
       await patchSubjectEpisodes(id, { episode_id: ids, type: epType });
-      emitCollectionsChanged();
-    } catch (e: unknown) {
+          } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "";
       if (msg.includes("need to add subject")) {
         // API says not collected — retry with ensureCollected
