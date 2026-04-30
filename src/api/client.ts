@@ -156,6 +156,28 @@ export async function getEpisodes(subjectId: number): Promise<PagedResponse<Epis
   );
 }
 
+/** GET /v0/users/{username}/collections — 全量获取用户收藏（处理分页） */
+export async function getAllUserCollections(params: {
+  username: string;
+  type?: number;
+}): Promise<PagedResponse<UserCollection>> {
+  const result: PagedResponse<UserCollection> = { data: [], total: 0, limit: 100, offset: 0 };
+
+  while (true) {
+    const page = await getUserCollections({
+      username: params.username,
+      type: params.type,
+      limit: 100,
+      offset: result.data.length,
+    });
+    result.data.push(...page.data);
+    result.total = page.total;
+    if (result.data.length >= page.total) break;
+  }
+
+  return result;
+}
+
 /** PATCH /v0/users/-/collections/{subject_id}/episodes — 批量更新剧集收藏状态 */
 export async function patchSubjectEpisodes(
   subjectId: number,

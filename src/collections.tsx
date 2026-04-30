@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Action, ActionPanel, Color, Image, List } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
-import { getUserCollections, getCalendar } from "./api/client";
+import { getUserCollections, getAllUserCollections, getCalendar } from "./api/client";
 import { getUsername } from "./oauth";
 import { SubjectDetail } from "./subject-detail";
 import { useAuth } from "./hooks/useAuth";
@@ -65,11 +65,9 @@ export default function Command() {
   } = useCachedPromise(
     async (type: string, pageNum: number, uname: string) => {
       if (type === "3") {
-        return getUserCollections({
+        return getAllUserCollections({
           username: uname,
           type: 3,
-          limit: 200,
-          offset: 0,
         });
       }
       return getUserCollections({
