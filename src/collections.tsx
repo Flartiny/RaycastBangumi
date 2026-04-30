@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Action, ActionPanel, Color, Image, List, LocalStorage } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
 import { getUserCollections, getAllUserCollections, getCalendar, getEpisodes } from "./api/client";
@@ -78,21 +78,13 @@ export default function Command() {
 
   const calendarData = calendar ?? null;
 
-  const [revalidateKey, setRevalidateKey] = useState(0);
-
-  // Listen for collection changes from SubjectDetail
-  useEffect(() => {
-    return onCollectionsChanged(() => {
-      setRevalidateKey((k) => k + 1);
-    });
-  }, []);
-
   const {
     isLoading: loadingCollections,
     data: result,
     error,
+    revalidate: revalidateCollections,
   } = useCachedPromise(
-    async (type: string, pageNum: number, _rk: number, uname: string) => {
+    async (type: string, pageNum: number, uname: string) => {
       if (type === "3") {
         return getAllUserCollections({
           username: uname,
@@ -106,7 +98,7 @@ export default function Command() {
         offset: (pageNum - 1) * LIMIT,
       });
     },
-    [collectionType, page, revalidateKey, username as string],
+    [collectionType, page, username as string],
     {
       keepPreviousData: true,
       execute: authenticated && !!username,
@@ -115,6 +107,16 @@ export default function Command() {
 
   const rawCollections = result?.data ?? [];
   const apiTotal = result?.total ?? 0;
+
+  // Listen for collection changes from SubjectDetail
+  const revalidateRef = useRef(revalidateCollections);
+  revalidateRef.current = revalidateCollections;
+
+  useEffect(() => {
+    return onCollectionsChanged(() => {
+      revalidateRef.current();
+    });
+  }, []);
 
   const [epInfoMap, setEpInfoMap] = useState<Map<number, EpInfo>>(new Map());
   const [loadingEpisodes, setLoadingEpisodes] = useState(false);
