@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Action, ActionPanel, Color, Image, List } from "@raycast/api";
+import { Action, ActionPanel, Color, Image, List, LocalStorage } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
 import { getUserCollections, getAllUserCollections, getCalendar, getEpisodes } from "./api/client";
 import { getUsername } from "./oauth";
@@ -36,6 +36,20 @@ export default function Command() {
   const [page, setPage] = useState(1);
 
   const isWatching = collectionType === "3";
+
+  // Clear expired episode caches on mount
+  useEffect(() => {
+    (async () => {
+      const expiry = await LocalStorage.getItem<string>("bangumi-episodes-expiry");
+      if (expiry && Date.now() >= Number(expiry)) {
+        const all = await LocalStorage.allItems();
+        for (const key of Object.keys(all)) {
+          if (key.startsWith("bangumi-episodes-")) await LocalStorage.removeItem(key);
+        }
+        await LocalStorage.removeItem("bangumi-episodes-expiry");
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     if (authenticated) {
@@ -88,10 +102,13 @@ export default function Command() {
   const apiTotal = result?.total ?? 0;
 
   const [airedEpMap, setAiredEpMap] = useState<Map<number, number>>(new Map());
+  const [loadingEpisodes, setLoadingEpisodes] = useState(false);
 
   useEffect(() => {
+    // Reset episode map when not watching
     if (!isWatching || !calendarData || rawCollections.length === 0) {
       setAiredEpMap(new Map());
+      setLoadingEpisodes(false);
       return;
     }
 
@@ -106,13 +123,30 @@ export default function Command() {
       .filter((c) => airingSet.has(c.subject_id))
       .map((c) => c.subject_id);
 
-    if (airingIds.length === 0) {
-      setAiredEpMap(new Map());
-      return;
-    }
+    // Use a key derived from sorted IDs for stable cache comparison
+    const key = airingIds.sort((a, b) => a - b).join(",");
 
+    setLoadingEpisodes(true);
     let cancelled = false;
+
     (async () => {
+      // Check LocalStorage cache (valid until midnight)
+      const expiry = await LocalStorage.getItem<string>("bangumi-episodes-expiry");
+      const now = Date.now();
+      if (expiry && now < Number(expiry)) {
+        const cached = await LocalStorage.getItem<string>(`bangumi-episodes-${key}`);
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached) as [number, number][];
+            if (!cancelled) {
+              setAiredEpMap(new Map(parsed));
+              setLoadingEpisodes(false);
+            }
+            return;
+          } catch { /* ignore corrupt cache */ }
+        }
+      }
+
       const results = await Promise.allSettled(
         airingIds.map((id) => getEpisodes(id).then((data) => ({ id, data }))),
       );
@@ -128,7 +162,17 @@ export default function Command() {
           map.set(id, airedCount);
         }
       }
-      setAiredEpMap(map);
+
+      // Cache until midnight
+      const midnight = new Date();
+      midnight.setHours(24, 0, 0, 0);
+      await LocalStorage.setItem(`bangumi-episodes-${key}`, JSON.stringify([...map]));
+      await LocalStorage.setItem("bangumi-episodes-expiry", String(midnight.getTime()));
+
+      if (!cancelled) {
+        setAiredEpMap(map);
+        setLoadingEpisodes(false);
+      }
     })();
 
     return () => { cancelled = true; };
@@ -182,7 +226,9 @@ export default function Command() {
   }
 
   const showContent = authenticated && !!username && !error;
-  const isLoading = isWatching ? loadingCollections || loadingCalendar : loadingCollections;
+  const isLoading = isWatching
+    ? loadingCollections || loadingCalendar || loadingEpisodes
+    : loadingCollections;
 
   return (
     <List
