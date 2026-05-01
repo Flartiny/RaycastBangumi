@@ -25,6 +25,18 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   return headers;
 }
 
+async function fetchWithRetry(url: string, init: RequestInit, retries = 3): Promise<Response> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fetch(url, init);
+    } catch (e) {
+      if (i === retries - 1) throw e;
+      await new Promise((r) => setTimeout(r, 1000 * (i + 1)));
+    }
+  }
+  throw new Error("unreachable");
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {},
@@ -33,7 +45,7 @@ async function request<T>(
   const authHeaders = await getAuthHeaders();
   const headers = { ...authHeaders, ...(options.headers || {}) };
 
-  const res = await fetch(url, { ...options, headers });
+  const res = await fetchWithRetry(url, { ...options, headers });
 
   if (!res.ok) {
     const body = await res.text();
