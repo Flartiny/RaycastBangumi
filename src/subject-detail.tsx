@@ -71,6 +71,7 @@ export function SubjectDetail({ id }: Props) {
   const currentEp = collection?.ep_status ?? 0;
   const totalEp = subject?.total_episodes ?? 0;
   const sortedEpisodes = episodeData?.data?.slice().sort((a, b) => a.sort - b.sort) ?? [];
+  const mainEpisodes = sortedEpisodes.filter((e) => e.type === 0);
 
   const [targetEp, setTargetEp] = useState<number | null>(null);
   // The actual target: if user has adjusted, use targetEp; otherwise use currentEp
@@ -119,7 +120,7 @@ export function SubjectDetail({ id }: Props) {
 
   async function doMarkEpisodes(from: number, to: number, epType: number) {
     try {
-      const ids = sortedEpisodes.slice(from, to).map((e) => e.id);
+      const ids = mainEpisodes.slice(from, to).map((e) => e.id);
       if (ids.length === 0) return;
       await patchSubjectEpisodes(id, { episode_id: ids, type: epType });
           } catch (e: unknown) {
@@ -128,7 +129,7 @@ export function SubjectDetail({ id }: Props) {
         // API says not collected — retry with ensureCollected
         const ok = await ensureCollected();
         if (!ok) throw e;
-        await patchSubjectEpisodes(id, { episode_id: sortedEpisodes.slice(from, to).map((ep) => ep.id), type: epType });
+        await patchSubjectEpisodes(id, { episode_id: mainEpisodes.slice(from, to).map((ep) => ep.id), type: epType });
       } else {
         throw e;
       }
@@ -187,7 +188,7 @@ export function SubjectDetail({ id }: Props) {
       });
       if (shouldUpdate) {
         await mutateCollection({ type });
-        await doMarkEpisodes(0, sortedEpisodes.length, 2);
+        await doMarkEpisodes(0, mainEpisodes.length, 2);
         return;
       }
     }
