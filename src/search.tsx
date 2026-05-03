@@ -123,7 +123,7 @@ function SubjectListItem({ subject }: { subject: Subject }) {
           <ActionPanel.Section>
             <Action.Push
               title="查看详情"
-              target={<SubjectDetail id={subject.id} />}
+              target={<SubjectDetail id={subject.id} name={subject.name} nameCn={subject.name_cn} />}
             />
           </ActionPanel.Section>
           <ActionPanel.Section>

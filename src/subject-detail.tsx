@@ -22,9 +22,11 @@ interface Preferences {
 
 interface Props {
   id: number;
+  name?: string;
+  nameCn?: string;
 }
 
-export function SubjectDetail({ id }: Props) {
+export function SubjectDetail({ id, name: propName, nameCn: propNameCn }: Props) {
   const preferences = getPreferenceValues<Preferences>();
 
   const { isLoading: loadingSubject, data: subject } = useCachedPromise(getSubject, [id], {
@@ -242,7 +244,7 @@ export function SubjectDetail({ id }: Props) {
             ) : (
               <Action.CopyToClipboard
                 title="复制名称"
-                content={subject?.name_cn || subject?.name || ""}
+                content={subject?.name_cn || subject?.name || propNameCn || propName || ""}
               />
             )}
           </ActionPanel.Section>
