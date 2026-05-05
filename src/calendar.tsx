@@ -3,6 +3,7 @@ import { Action, ActionPanel, Color, Image, List } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
 import { getCalendar } from "./api/client";
 import { SubjectDetail } from "./subject-detail";
+import { buildSubjectKeywords } from "./pinyin-keywords";
 import type { CalendarItem, SubjectSmall } from "./api/types";
 
 const WEEKDAY_CN: Record<number, string> = {
@@ -142,6 +143,7 @@ function CalendarSubjectItem({
       }}
       title={subject.name_cn || subject.name}
       subtitle={subject.name_cn ? subject.name : undefined}
+      keywords={buildSubjectKeywords(subject.name_cn, subject.name)}
       accessories={[
         ...(rating ? [{ text: { value: rating, color: Color.Yellow } }] : []),
         ...(subject.rank ? [{ text: `#${subject.rank}` }] : []),

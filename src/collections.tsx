@@ -8,6 +8,7 @@ import { useAuth } from "./hooks/useAuth";
 import { LoginLoading, LoginPrompt } from "./components/LoginPrompt";
 import { CollectionTypeLabel, SubjectTypeLabel } from "./api/types";
 import { sortCollections, getDisplayLabel, getTodayBangumiWeekday, WEEKDAY_CN } from "./sort-collections";
+import { buildSubjectKeywords } from "./pinyin-keywords";
 import type { CollectionType, UserCollection } from "./api/types";
 
 const LIMIT = 20;
@@ -374,6 +375,7 @@ function CollectionListItem({
       }}
       title={subject.name_cn || subject.name}
       subtitle={subject.name_cn ? subject.name : undefined}
+      keywords={buildSubjectKeywords(subject.name_cn, subject.name)}
       accessories={accessories}
       detail={
         <List.Item.Detail

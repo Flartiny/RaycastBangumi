@@ -4,6 +4,7 @@ import { useCachedPromise } from "@raycast/utils";
 import { searchSubjects } from "./api/client";
 import { SubjectDetail } from "./subject-detail";
 import { SubjectTypeLabel } from "./api/types";
+import { buildSubjectKeywords } from "./pinyin-keywords";
 import type { Subject } from "./api/types";
 
 const subjectTypeOptions: { label: string; value: string }[] = [
@@ -89,6 +90,7 @@ function SubjectListItem({ subject }: { subject: Subject }) {
       }}
       title={subject.name_cn || subject.name}
       subtitle={subject.name_cn ? subject.name : undefined}
+      keywords={buildSubjectKeywords(subject.name_cn, subject.name)}
       accessories={[
         { tag: typeLabel },
         { text: rating },
