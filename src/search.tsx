@@ -18,7 +18,7 @@ const subjectTypeOptions: { label: string; value: string }[] = [
 
 export default function Command() {
   const [searchText, setSearchText] = useState("");
-  const [typeFilter, setTypeFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("2");
 
   const {
     isLoading,
