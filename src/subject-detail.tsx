@@ -71,9 +71,9 @@ export function SubjectDetail({ id, name: propName, nameCn: propNameCn }: Props)
 
   const currentType = collection?.type;
   const currentEp = collection?.ep_status ?? 0;
-  const totalEp = subject?.total_episodes ?? 0;
   const sortedEpisodes = episodeData?.data?.slice().sort((a, b) => a.sort - b.sort) ?? [];
   const mainEpisodes = sortedEpisodes.filter((e) => e.type === 0);
+  const totalEp = mainEpisodes.length > 0 ? mainEpisodes.length : (subject?.total_episodes ?? 0);
 
   const [targetEp, setTargetEp] = useState<number | null>(null);
   // The actual target: if user has adjusted, use targetEp; otherwise use currentEp
