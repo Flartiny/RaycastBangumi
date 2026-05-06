@@ -375,7 +375,7 @@ function CollectionListItem({
       }}
       title={subject.name_cn || subject.name}
       subtitle={subject.name_cn ? subject.name : undefined}
-      keywords={buildSubjectKeywords(subject.name_cn, subject.name)}
+      keywords={[...buildSubjectKeywords(subject.name_cn, subject.name), ...(displayLabel ? [displayLabel] : [])]}
       accessories={accessories}
       detail={
         <List.Item.Detail

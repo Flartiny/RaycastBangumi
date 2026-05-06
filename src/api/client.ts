@@ -27,11 +27,16 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
 
 async function fetchWithRetry(url: string, init: RequestInit, retries = 3): Promise<Response> {
   for (let i = 0; i < retries; i++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
     try {
-      return await fetch(url, init);
+      const res = await fetch(url, { ...init, signal: controller.signal });
+      clearTimeout(timeout);
+      return res;
     } catch (e) {
+      clearTimeout(timeout);
       if (i === retries - 1) throw e;
-      await new Promise((r) => setTimeout(r, 1000 * (i + 1)));
+      await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, i)));
     }
   }
   throw new Error("unreachable");

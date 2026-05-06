@@ -24,6 +24,7 @@ function getTodayBangumiWeekday(): number {
 export default function Command() {
   const today = getTodayBangumiWeekday();
   const [currentDay, setCurrentDay] = useState<number>(today);
+  const [searchText, setSearchText] = useState("");
 
   const { isLoading, data: calendar } = useCachedPromise(
     getCalendar,
@@ -41,6 +42,7 @@ export default function Command() {
   const currentDayData = dayMap.get(currentDay);
   const isToday = currentDay === today;
   const dayLabel = WEEKDAY_CN[currentDay];
+  const isSearching = searchText.length > 0;
 
   function goNext() {
     setCurrentDay((d) => (d >= 7 ? 1 : d + 1));
@@ -56,6 +58,7 @@ export default function Command() {
     <List
       isLoading={isLoading}
       searchBarPlaceholder={`筛选${dayLabel}的番剧...`}
+      onSearchTextChange={setSearchText}
       searchBarAccessory={
         <List.Dropdown
           tooltip="选择星期"
@@ -72,47 +75,68 @@ export default function Command() {
         </List.Dropdown>
       }
     >
-      <List.Section
-        title={`${dayLabel}${isToday ? " · 今天" : ""}`}
-        subtitle={currentDayData?.weekday.ja}
-      >
-        {subjects.length === 0 && !isLoading && (
-          <List.Item
-            title={isToday ? "今天暂无放送" : "暂无放送"}
-            actions={
-              <ActionPanel>
-                <Action
-                  title="前一天"
-                  shortcut={{ key: "arrowLeft", modifiers: [] }}
-                  onAction={goPrev}
-                />
-                <Action
-                  title="后一天"
-                  shortcut={{ key: "arrowRight", modifiers: [] }}
-                  onAction={goNext}
-                />
-                {!isToday && (
+      {!isSearching && (
+        <List.Section
+          title={`${dayLabel}${isToday ? " · 今天" : ""}`}
+          subtitle={currentDayData?.weekday.ja}
+        >
+          {subjects.length === 0 && !isLoading && (
+            <List.Item
+              title={isToday ? "今天暂无放送" : "暂无放送"}
+              actions={
+                <ActionPanel>
                   <Action
-                    title="回到今天"
-                    shortcut={{ key: "home", modifiers: [] }}
-                    onAction={() => setCurrentDay(today)}
+                    title="前一天"
+                    shortcut={{ key: "arrowLeft", modifiers: [] }}
+                    onAction={goPrev}
                   />
-                )}
-              </ActionPanel>
-            }
-          />
-        )}
-        {subjects.map((subject) => (
-          <CalendarSubjectItem
-            key={subject.id}
-            subject={subject}
-            isToday={isToday}
-            onPrev={goPrev}
-            onNext={goNext}
-            onToday={() => setCurrentDay(today)}
-          />
+                  <Action
+                    title="后一天"
+                    shortcut={{ key: "arrowRight", modifiers: [] }}
+                    onAction={goNext}
+                  />
+                  {!isToday && (
+                    <Action
+                      title="回到今天"
+                      shortcut={{ key: "home", modifiers: [] }}
+                      onAction={() => setCurrentDay(today)}
+                    />
+                  )}
+                </ActionPanel>
+              }
+            />
+          )}
+          {subjects.map((subject) => (
+            <CalendarSubjectItem
+              key={subject.id}
+              subject={subject}
+              isToday={isToday}
+              onPrev={goPrev}
+              onNext={goNext}
+              onToday={() => setCurrentDay(today)}
+            />
+          ))}
+        </List.Section>
+      )}
+      {isSearching &&
+        (calendar ?? []).map((day) => (
+          <List.Section
+            key={day.weekday.id}
+            title={`${WEEKDAY_CN[day.weekday.id]}${day.weekday.id === today ? " · 今天" : ""}`}
+            subtitle={day.weekday.ja}
+          >
+            {day.items.map((subject) => (
+              <CalendarSubjectItem
+                key={subject.id}
+                subject={subject}
+                isToday={day.weekday.id === today}
+                onPrev={goPrev}
+                onNext={goNext}
+                onToday={() => setCurrentDay(today)}
+              />
+            ))}
+          </List.Section>
         ))}
-      </List.Section>
     </List>
   );
 }
