@@ -54,10 +54,21 @@ export default function Command() {
 
   const subjects = currentDayData?.items ?? [];
 
+  function matchSubject(s: SubjectSmall, q: string): boolean {
+    const lower = q.toLowerCase();
+    const keywords = buildSubjectKeywords(s.name_cn, s.name);
+    return (
+      (s.name_cn || "").toLowerCase().includes(lower) ||
+      (s.name || "").toLowerCase().includes(lower) ||
+      keywords.some((k) => k.toLowerCase().includes(lower))
+    );
+  }
+
   return (
     <List
       isLoading={isLoading}
       searchBarPlaceholder={`筛选${dayLabel}的番剧...`}
+      searchText={searchText}
       onSearchTextChange={setSearchText}
       searchBarAccessory={
         <List.Dropdown
@@ -118,25 +129,35 @@ export default function Command() {
           ))}
         </List.Section>
       )}
-      {isSearching &&
-        (calendar ?? []).map((day) => (
-          <List.Section
-            key={day.weekday.id}
-            title={`${WEEKDAY_CN[day.weekday.id]}${day.weekday.id === today ? " · 今天" : ""}`}
-            subtitle={day.weekday.ja}
-          >
-            {day.items.map((subject) => (
-              <CalendarSubjectItem
-                key={subject.id}
-                subject={subject}
-                isToday={day.weekday.id === today}
-                onPrev={goPrev}
-                onNext={goNext}
-                onToday={() => setCurrentDay(today)}
-              />
-            ))}
-          </List.Section>
-        ))}
+      {isSearching && (
+        <>
+          {(calendar ?? []).map((day) => {
+            const filtered = day.items.filter((s) => matchSubject(s, searchText));
+            if (filtered.length === 0) return null;
+            return (
+              <List.Section
+                key={day.weekday.id}
+                title={`${WEEKDAY_CN[day.weekday.id]}${day.weekday.id === today ? " · 今天" : ""}`}
+                subtitle={day.weekday.ja}
+              >
+                {filtered.map((subject) => (
+                  <CalendarSubjectItem
+                    key={subject.id}
+                    subject={subject}
+                    isToday={false}
+                    onPrev={goPrev}
+                    onNext={goNext}
+                    onToday={() => setCurrentDay(today)}
+                  />
+                ))}
+              </List.Section>
+            );
+          })}
+          {(calendar ?? []).every((d) => d.items.filter((s) => matchSubject(s, searchText)).length === 0) && (
+            <List.EmptyView title="无匹配结果" />
+          )}
+        </>
+      )}
     </List>
   );
 }

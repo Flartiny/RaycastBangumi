@@ -40,6 +40,7 @@ export default function Command() {
   const [username, setUsername] = useState<string | null>(null);
   const [collectionType, setCollectionType] = useState("3");
   const [page, setPage] = useState(1);
+  const [searchText, setSearchText] = useState("");
 
   const isWatching = collectionType === "3";
 
@@ -240,10 +241,27 @@ export default function Command() {
     ? loadingCollections || loadingCalendar || loadingEpisodes
     : loadingCollections;
 
+  const isSearching = searchText.length > 0;
+
+  function matchCollection(c: UserCollection, q: string): boolean {
+    const lower = q.toLowerCase();
+    const keywords = buildSubjectKeywords(c.subject.name_cn, c.subject.name);
+    return (
+      (c.subject.name_cn || "").toLowerCase().includes(lower) ||
+      (c.subject.name || "").toLowerCase().includes(lower) ||
+      keywords.some((k) => k.toLowerCase().includes(lower))
+    );
+  }
+
+  const searchedCollections = isSearching ? sorted.filter((c) => matchCollection(c, searchText)) : null;
+  const displayedCollections = isSearching ? searchedCollections! : pageCollections;
+
   return (
     <List
       isLoading={isLoading}
       searchBarPlaceholder={`筛选${typeLabel}条目...`}
+      searchText={searchText}
+      onSearchTextChange={(t) => { setSearchText(t); setPage(1); }}
       searchBarAccessory={
         <List.Dropdown
           tooltip="收藏状态"
@@ -268,13 +286,13 @@ export default function Command() {
       {authenticated && username && error && (
         <List.EmptyView title="加载失败" description={error.message} />
       )}
-      {authenticated && username && !error && !isLoading && pageCollections.length === 0 && page === 1 && (
+      {authenticated && username && !error && !isLoading && displayedCollections.length === 0 && page === 1 && !isSearching && (
         <List.EmptyView
           title="暂无数据"
           description={`没有${typeLabel}条目`}
         />
       )}
-      {authenticated && username && !error && !isLoading && pageCollections.length === 0 && page > 1 && (
+      {authenticated && username && !error && !isLoading && displayedCollections.length === 0 && page > 1 && !isSearching && (
         <List.EmptyView
           title="翻过头了"
           description={`第 ${page} 页无数据，共 ${totalPages} 页`}
@@ -294,11 +312,18 @@ export default function Command() {
           }
         />
       )}
+      {showContent && isSearching && displayedCollections.length === 0 && (
+        <List.EmptyView title="无匹配结果" />
+      )}
       {showContent && (
         <List.Section
-          title={`${typeLabel} · 第 ${page} / ${totalPages} 页 · 共 ${sorted.length} 条`}
+          title={
+            isSearching
+              ? `搜索"${searchText}" · 共 ${displayedCollections.length} 条`
+              : `${typeLabel} · 第 ${page} / ${totalPages} 页 · 共 ${sorted.length} 条`
+          }
         >
-          {pageCollections.map((item) => (
+          {displayedCollections.map((item) => (
             <CollectionListItem
               key={item.subject_id}
               collection={item}
@@ -312,6 +337,7 @@ export default function Command() {
               displayLabel={displayLabels.get(item.subject_id) ?? null}
               mainTotalEp={mainTotalEpMap.get(item.subject_id)}
               onPop={revalidateCollections}
+              isSearching={isSearching}
             />
           ))}
         </List.Section>
@@ -332,6 +358,7 @@ function CollectionListItem({
   displayLabel,
   mainTotalEp,
   onPop,
+  isSearching,
 }: {
   collection: UserCollection;
   page: number;
@@ -344,6 +371,7 @@ function CollectionListItem({
   displayLabel: string | null;
   mainTotalEp?: number;
   onPop?: () => void;
+  isSearching?: boolean;
 }) {
   const subject = collection.subject;
   const typeLabel = SubjectTypeLabel[subject.type] || "未知";
@@ -460,36 +488,38 @@ function CollectionListItem({
               content={`https://bgm.tv/subject/${subject.id}`}
             />
           </ActionPanel.Section>
-          <ActionPanel.Section>
-            {page > 1 && (
-              <Action
-                title="前一页"
-                shortcut={{ key: "arrowLeft", modifiers: [] }}
-                onAction={onPrev}
-              />
-            )}
-            {page < totalPages && (
-              <Action
-                title="后一页"
-                shortcut={{ key: "arrowRight", modifiers: [] }}
-                onAction={onNext}
-              />
-            )}
-            {page !== 1 && (
-              <Action
-                title="回到第 1 页"
-                shortcut={{ key: "home", modifiers: [] }}
-                onAction={onFirst}
-              />
-            )}
-            {page !== totalPages && totalPages > 1 && (
-              <Action
-                title="跳到最后页"
-                shortcut={{ key: "end", modifiers: [] }}
-                onAction={onLast}
-              />
-            )}
-          </ActionPanel.Section>
+          {!isSearching && (
+            <ActionPanel.Section>
+              {page > 1 && (
+                <Action
+                  title="前一页"
+                  shortcut={{ key: "arrowLeft", modifiers: [] }}
+                  onAction={onPrev}
+                />
+              )}
+              {page < totalPages && (
+                <Action
+                  title="后一页"
+                  shortcut={{ key: "arrowRight", modifiers: [] }}
+                  onAction={onNext}
+                />
+              )}
+              {page !== 1 && (
+                <Action
+                  title="回到第 1 页"
+                  shortcut={{ key: "home", modifiers: [] }}
+                  onAction={onFirst}
+                />
+              )}
+              {page !== totalPages && totalPages > 1 && (
+                <Action
+                  title="跳到最后页"
+                  shortcut={{ key: "end", modifiers: [] }}
+                  onAction={onLast}
+                />
+              )}
+            </ActionPanel.Section>
+          )}
         </ActionPanel>
       }
     />
