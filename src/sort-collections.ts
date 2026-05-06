@@ -33,11 +33,11 @@ export function getCollectionMeta(
   const airedEp = isAiring ? (airedEpMap.get(c.subject_id) ?? totalEp) : totalEp;
 
   let group: SortedGroup;
-  if (isAiring && weekday === today) {
-    group = "airing_caught";
+  if (!isAiring && c.ep_status === 0) {
+    group = "finished";
   } else if (isAiring && c.ep_status < airedEp) {
     group = "airing_not_caught";
-  } else if (isAiring && c.ep_status >= airedEp) {
+  } else if (isAiring) {
     group = "airing_caught";
   } else {
     group = "finished";
