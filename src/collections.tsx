@@ -12,6 +12,7 @@ import { buildSubjectKeywords } from "./pinyin-keywords";
 import type { CollectionType, UserCollection } from "./api/types";
 
 const LIMIT = 20;
+const EMPTY_COLLECTIONS: UserCollection[] = [];
 
 const COLLECTION_TYPES: { label: string; value: string }[] = [
   { label: "想看", value: "1" },
@@ -106,7 +107,7 @@ export default function Command() {
     },
   );
 
-  const rawCollections = result?.data ?? [];
+  const rawCollections = result?.data ?? EMPTY_COLLECTIONS;
   const apiTotal = result?.total ?? 0;
 
   const [epInfoMap, setEpInfoMap] = useState<Map<number, EpInfo>>(new Map());
