@@ -55,12 +55,19 @@ const bangumiOAuth = new OAuthService({
 
 /** Check login status without triggering OAuth flow */
 export async function isLoggedIn(): Promise<boolean> {
-  try {
-    const tokens = await oauthClient.getTokens();
-    return !!tokens?.accessToken;
-  } catch {
-    return false;
+  for (let i = 0; i < 3; i++) {
+    try {
+      const tokens = await oauthClient.getTokens();
+      return !!tokens?.accessToken;
+    } catch (e) {
+      if (i === 2) {
+        console.error("getTokens failed after 3 attempts:", e);
+        return false;
+      }
+      await new Promise((r) => setTimeout(r, 1000));
+    }
   }
+  return false;
 }
 
 /** Get access token via OAuth (auto-refreshes if needed) */
