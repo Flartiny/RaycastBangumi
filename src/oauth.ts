@@ -11,6 +11,9 @@ export const oauthClient = new OAuth.PKCEClient({
   description: "登录 Bangumi 账户以使用收藏等高级功能",
 });
 
+const REFRESH_TOKEN_URL =
+  "https://oauth.raycast.com/v1/refresh-token/sVkEaU9uSQj-x-jqMbDTgP7bmUu6YKKbFEcOslLZrJa_b1ww4E4SXW1d0t30PTGEXGOw2s3ghgg5ZfiYwYCe7z0GTYfFeB6J2XQN8VZnr3-klv4w2t0RYmyk5GQX1zw";
+
 const bangumiOAuth = new OAuthService({
   client: oauthClient,
   clientId: "bgm602569f1d18f7f061",
@@ -18,8 +21,7 @@ const bangumiOAuth = new OAuthService({
     "https://oauth.raycast.com/v1/authorize/E2PP3iKmb5JlZ5QHnxr_pMS0eXVxfq8fni3yhSfEuTWP-9zrGQvNmMZFXMSZI5Z9rjbpTPAkrtcTdZa5MiqugJ_8pfKbv2FbrXwAGAhQJb8PmhzoWJOOwKAUXtk",
   tokenUrl:
     "https://oauth.raycast.com/v1/token/mRKNpPCabwMLkMaLp8LQ1quMeAlZbElU1E1kgfW-wxTda5wiUD5v8Ktx8tBTUSAQlYdKJUHYIVLf5o23cRuRhFS4L2TTDdUvq0qXGxvpPPC4tXNaPv9veC8qx3dgngs",
-  refreshTokenUrl:
-    "https://oauth.raycast.com/v1/refresh-token/sVkEaU9uSQj-x-jqMbDTgP7bmUu6YKKbFEcOslLZrJa_b1ww4E4SXW1d0t30PTGEXGOw2s3ghgg5ZfiYwYCe7z0GTYfFeB6J2XQN8VZnr3-klv4w2t0RYmyk5GQX1zw",
+  refreshTokenUrl: REFRESH_TOKEN_URL,
   scope: "",
   bodyEncoding: "json",
   tokenResponseParser: (response) => {
@@ -53,6 +55,27 @@ const bangumiOAuth = new OAuthService({
   },
 });
 
+async function refreshTokens(refreshToken: string): Promise<OAuth.TokenResponse> {
+  const res = await fetch(REFRESH_TOKEN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+  });
+  if (!res.ok) {
+    throw new Error(`Token refresh failed: ${res.status}`);
+  }
+  const data = (await res.json()) as {
+    access_token: string;
+    refresh_token?: string;
+    expires_in?: number;
+  };
+  return {
+    access_token: data.access_token,
+    refresh_token: data.refresh_token ?? refreshToken,
+    expires_in: data.expires_in,
+  };
+}
+
 /** Check login status without triggering OAuth flow */
 export async function isLoggedIn(): Promise<boolean> {
   for (let i = 0; i < 3; i++) {
@@ -70,8 +93,24 @@ export async function isLoggedIn(): Promise<boolean> {
   return false;
 }
 
-/** Get access token via OAuth (auto-refreshes if needed) */
+/** Get a valid access token, refreshing if expired */
 export async function getAccessToken(): Promise<string> {
+  const tokenSet = await oauthClient.getTokens();
+  if (tokenSet?.accessToken) {
+    if (tokenSet.refreshToken && tokenSet.isExpired()) {
+      try {
+        const refreshed = await refreshTokens(tokenSet.refreshToken);
+        await oauthClient.setTokens(refreshed);
+        return refreshed.access_token;
+      } catch (e) {
+        console.error("Token refresh failed, falling back to re-auth:", e);
+        // Fall through to OAuth flow
+      }
+    } else {
+      return tokenSet.accessToken;
+    }
+  }
+  // No tokens or refresh failed — trigger OAuth flow
   const token = await bangumiOAuth.authorize();
   return token ?? "";
 }
