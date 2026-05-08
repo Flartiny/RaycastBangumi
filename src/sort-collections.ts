@@ -35,6 +35,8 @@ export function getCollectionMeta(
   let group: SortedGroup;
   if (!isAiring && c.ep_status === 0) {
     group = "finished";
+  } else if (isAiring && weekday === today && c.ep_status > 0) {
+    group = "airing_caught";
   } else if (isAiring && c.ep_status < airedEp) {
     group = "airing_not_caught";
   } else if (isAiring) {
