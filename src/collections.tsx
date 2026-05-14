@@ -48,13 +48,13 @@ export default function Command() {
   // Clear expired episode caches on mount
   useEffect(() => {
     (async () => {
-      const expiry = await LocalStorage.getItem<string>("bgm-eps-expiry");
+      const expiry = await LocalStorage.getItem<string>("bgm-eps-v3-expiry");
       if (expiry && Date.now() >= Number(expiry)) {
         const all = await LocalStorage.allItems();
         for (const key of Object.keys(all)) {
-          if (key.startsWith("bgm-eps-v2-")) await LocalStorage.removeItem(key);
+          if (key.startsWith("bgm-eps-")) await LocalStorage.removeItem(key);
         }
-        await LocalStorage.removeItem("bgm-eps-expiry");
+        await LocalStorage.removeItem("bgm-eps-v3-expiry");
       }
     })();
   }, []);
@@ -144,10 +144,10 @@ export default function Command() {
     let cancelled = false;
 
     (async () => {
-      const expiry = await LocalStorage.getItem<string>("bgm-eps-expiry");
+      const expiry = await LocalStorage.getItem<string>("bgm-eps-v3-expiry");
       const now = Date.now();
       if (expiry && now < Number(expiry)) {
-        const cached = await LocalStorage.getItem<string>(`bgm-eps-v2-${key}`);
+        const cached = await LocalStorage.getItem<string>(`bgm-eps-v3-${key}`);
         if (cached) {
           try {
             const parsed = JSON.parse(cached) as [number, EpInfo][];
@@ -184,8 +184,8 @@ export default function Command() {
       if (allSucceeded) {
         const midnight = new Date();
         midnight.setHours(24, 0, 0, 0);
-        await LocalStorage.setItem(`bgm-eps-v2-${key}`, JSON.stringify([...map]));
-        await LocalStorage.setItem("bgm-eps-expiry", String(midnight.getTime()));
+        await LocalStorage.setItem(`bgm-eps-v3-${key}`, JSON.stringify([...map]));
+        await LocalStorage.setItem("bgm-eps-v3-expiry", String(midnight.getTime()));
       }
 
       if (!cancelled) {
