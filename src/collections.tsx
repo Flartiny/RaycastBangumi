@@ -234,6 +234,15 @@ export default function Command() {
 
   const typeLabel = CollectionTypeLabel[parseInt(collectionType) as CollectionType];
 
+  async function forceRefresh() {
+    const all = await LocalStorage.allItems();
+    for (const key of Object.keys(all)) {
+      if (key.startsWith("bgm-eps-")) await LocalStorage.removeItem(key);
+    }
+    await LocalStorage.removeItem("bgm-eps-v3-expiry");
+    revalidateCollections();
+  }
+
   function goNext() {
     setPage((p) => Math.min(p + 1, totalPages));
   }
@@ -303,7 +312,7 @@ export default function Command() {
           description={error.message}
           actions={
             <ActionPanel>
-              <Action title="重新加载" onAction={revalidateCollections} />
+              <Action title="重新加载" onAction={forceRefresh} />
             </ActionPanel>
           }
         />
@@ -359,6 +368,7 @@ export default function Command() {
               displayLabel={displayLabels.get(item.subject_id) ?? null}
               mainTotalEp={mainTotalEpMap.get(item.subject_id)}
               onPop={revalidateCollections}
+              onRefresh={forceRefresh}
               isSearching={isSearching}
             />
           ))}
@@ -380,6 +390,7 @@ function CollectionListItem({
   displayLabel,
   mainTotalEp,
   onPop,
+  onRefresh,
   isSearching,
 }: {
   collection: UserCollection;
@@ -393,6 +404,7 @@ function CollectionListItem({
   displayLabel: string | null;
   mainTotalEp?: number;
   onPop?: () => void;
+  onRefresh?: () => void;
   isSearching?: boolean;
 }) {
   const subject = collection.subject;
@@ -501,7 +513,7 @@ function CollectionListItem({
             />
             <Action
               title="刷新数据"
-              onAction={onPop}
+              onAction={onRefresh}
             />
           </ActionPanel.Section>
           <ActionPanel.Section>
