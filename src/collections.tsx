@@ -292,7 +292,15 @@ export default function Command() {
       )}
       {authenticated && !username && <LoginLoading />}
       {authenticated && username && error && (
-        <List.EmptyView title="加载失败" description={error.message} />
+        <List.EmptyView
+          title="加载失败"
+          description={error.message}
+          actions={
+            <ActionPanel>
+              <Action title="重新加载" onAction={revalidateCollections} />
+            </ActionPanel>
+          }
+        />
       )}
       {authenticated && username && !error && !isLoading && displayedCollections.length === 0 && page === 1 && !isSearching && (
         <List.EmptyView
@@ -479,6 +487,13 @@ function CollectionListItem({
       }
       actions={
         <ActionPanel>
+          <ActionPanel.Section>
+            <Action
+              title="刷新数据"
+              shortcut={{ key: "r", modifiers: ["cmd", "shift"] }}
+              onAction={onPop}
+            />
+          </ActionPanel.Section>
           <ActionPanel.Section>
             <Action.Push
               title="查看详情"
