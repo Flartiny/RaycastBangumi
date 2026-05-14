@@ -48,13 +48,13 @@ export default function Command() {
   // Clear expired episode caches on mount
   useEffect(() => {
     (async () => {
-      const expiry = await LocalStorage.getItem<string>("bgm-eps-expiry");
+      const expiry = await LocalStorage.getItem<string>("bgm-eps-v3-expiry");
       if (expiry && Date.now() >= Number(expiry)) {
         const all = await LocalStorage.allItems();
         for (const key of Object.keys(all)) {
-          if (key.startsWith("bgm-eps-v2-")) await LocalStorage.removeItem(key);
+          if (key.startsWith("bgm-eps-")) await LocalStorage.removeItem(key);
         }
-        await LocalStorage.removeItem("bgm-eps-expiry");
+        await LocalStorage.removeItem("bgm-eps-v3-expiry");
       }
     })();
   }, []);
@@ -111,12 +111,12 @@ export default function Command() {
   const apiTotal = result?.total ?? 0;
 
   const [epInfoMap, setEpInfoMap] = useState<Map<number, EpInfo>>(new Map());
-  const [loadingEpisodes, setLoadingEpisodes] = useState(false);
+  const [episodesReady, setEpisodesReady] = useState(false);
 
   useEffect(() => {
     if (!isWatching || !calendarData || rawCollections.length === 0) {
       setEpInfoMap(new Map());
-      setLoadingEpisodes(false);
+      setEpisodesReady(false);
       return;
     }
 
@@ -131,22 +131,29 @@ export default function Command() {
       .filter((c) => airingSet.has(c.subject_id))
       .map((c) => c.subject_id);
 
+    // No airing items → no episode data needed
+    if (airingIds.length === 0) {
+      setEpInfoMap(new Map());
+      setEpisodesReady(true);
+      return;
+    }
+
     const key = airingIds.sort((a, b) => a - b).join(",");
 
-    setLoadingEpisodes(true);
+    setEpisodesReady(false);
     let cancelled = false;
 
     (async () => {
-      const expiry = await LocalStorage.getItem<string>("bgm-eps-expiry");
+      const expiry = await LocalStorage.getItem<string>("bgm-eps-v3-expiry");
       const now = Date.now();
       if (expiry && now < Number(expiry)) {
-        const cached = await LocalStorage.getItem<string>(`bgm-eps-v2-${key}`);
+        const cached = await LocalStorage.getItem<string>(`bgm-eps-v3-${key}`);
         if (cached) {
           try {
             const parsed = JSON.parse(cached) as [number, EpInfo][];
             if (!cancelled) {
               setEpInfoMap(new Map(parsed));
-              setLoadingEpisodes(false);
+              setEpisodesReady(true);
             }
             return;
           } catch { /* ignore corrupt cache */ }
@@ -161,23 +168,29 @@ export default function Command() {
 
       const map = new Map<number, EpInfo>();
       const todayStr = new Date().toISOString().slice(0, 10);
+      let allSucceeded = true;
       for (const r of results) {
         if (r.status === "fulfilled") {
           const { id, data } = r.value;
           const mainEps = data.data.filter((ep) => ep.type === 0);
           const airedCount = mainEps.filter((ep) => ep.airdate && ep.airdate <= todayStr).length;
           map.set(id, { aired: airedCount, total: mainEps.length });
+        } else {
+          allSucceeded = false;
         }
       }
 
-      const midnight = new Date();
-      midnight.setHours(24, 0, 0, 0);
-      await LocalStorage.setItem(`bgm-eps-v2-${key}`, JSON.stringify([...map]));
-      await LocalStorage.setItem("bgm-eps-expiry", String(midnight.getTime()));
+      // Only cache if every fetch succeeded, otherwise retry on next load
+      if (allSucceeded) {
+        const midnight = new Date();
+        midnight.setHours(24, 0, 0, 0);
+        await LocalStorage.setItem(`bgm-eps-v3-${key}`, JSON.stringify([...map]));
+        await LocalStorage.setItem("bgm-eps-v3-expiry", String(midnight.getTime()));
+      }
 
       if (!cancelled) {
         setEpInfoMap(map);
-        setLoadingEpisodes(false);
+        setEpisodesReady(true);
       }
     })();
 
@@ -221,6 +234,15 @@ export default function Command() {
 
   const typeLabel = CollectionTypeLabel[parseInt(collectionType) as CollectionType];
 
+  async function forceRefresh() {
+    const all = await LocalStorage.allItems();
+    for (const key of Object.keys(all)) {
+      if (key.startsWith("bgm-eps-")) await LocalStorage.removeItem(key);
+    }
+    await LocalStorage.removeItem("bgm-eps-v3-expiry");
+    revalidateCollections();
+  }
+
   function goNext() {
     setPage((p) => Math.min(p + 1, totalPages));
   }
@@ -239,7 +261,7 @@ export default function Command() {
 
   const showContent = authenticated && !!username && !error;
   const isLoading = isWatching
-    ? loadingCollections || loadingCalendar || loadingEpisodes
+    ? loadingCollections || loadingCalendar || !episodesReady
     : loadingCollections;
 
   const isSearching = searchText.length > 0;
@@ -285,7 +307,15 @@ export default function Command() {
       )}
       {authenticated && !username && <LoginLoading />}
       {authenticated && username && error && (
-        <List.EmptyView title="加载失败" description={error.message} />
+        <List.EmptyView
+          title="加载失败"
+          description={error.message}
+          actions={
+            <ActionPanel>
+              <Action title="重新加载" onAction={forceRefresh} />
+            </ActionPanel>
+          }
+        />
       )}
       {authenticated && username && !error && !isLoading && displayedCollections.length === 0 && page === 1 && !isSearching && (
         <List.EmptyView
@@ -338,6 +368,7 @@ export default function Command() {
               displayLabel={displayLabels.get(item.subject_id) ?? null}
               mainTotalEp={mainTotalEpMap.get(item.subject_id)}
               onPop={revalidateCollections}
+              onRefresh={forceRefresh}
               isSearching={isSearching}
             />
           ))}
@@ -359,6 +390,7 @@ function CollectionListItem({
   displayLabel,
   mainTotalEp,
   onPop,
+  onRefresh,
   isSearching,
 }: {
   collection: UserCollection;
@@ -372,6 +404,7 @@ function CollectionListItem({
   displayLabel: string | null;
   mainTotalEp?: number;
   onPop?: () => void;
+  onRefresh?: () => void;
   isSearching?: boolean;
 }) {
   const subject = collection.subject;
@@ -477,6 +510,10 @@ function CollectionListItem({
               title="查看详情"
               target={<SubjectDetail id={subject.id} name={subject.name} nameCn={subject.name_cn} />}
               onPop={onPop}
+            />
+            <Action
+              title="刷新数据"
+              onAction={onRefresh}
             />
           </ActionPanel.Section>
           <ActionPanel.Section>
