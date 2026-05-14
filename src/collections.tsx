@@ -111,12 +111,12 @@ export default function Command() {
   const apiTotal = result?.total ?? 0;
 
   const [epInfoMap, setEpInfoMap] = useState<Map<number, EpInfo>>(new Map());
-  const [loadingEpisodes, setLoadingEpisodes] = useState(false);
+  const [episodesReady, setEpisodesReady] = useState(false);
 
   useEffect(() => {
     if (!isWatching || !calendarData || rawCollections.length === 0) {
       setEpInfoMap(new Map());
-      setLoadingEpisodes(false);
+      setEpisodesReady(false);
       return;
     }
 
@@ -131,9 +131,16 @@ export default function Command() {
       .filter((c) => airingSet.has(c.subject_id))
       .map((c) => c.subject_id);
 
+    // No airing items → no episode data needed
+    if (airingIds.length === 0) {
+      setEpInfoMap(new Map());
+      setEpisodesReady(true);
+      return;
+    }
+
     const key = airingIds.sort((a, b) => a - b).join(",");
 
-    setLoadingEpisodes(true);
+    setEpisodesReady(false);
     let cancelled = false;
 
     (async () => {
@@ -146,7 +153,7 @@ export default function Command() {
             const parsed = JSON.parse(cached) as [number, EpInfo][];
             if (!cancelled) {
               setEpInfoMap(new Map(parsed));
-              setLoadingEpisodes(false);
+              setEpisodesReady(true);
             }
             return;
           } catch { /* ignore corrupt cache */ }
@@ -177,7 +184,7 @@ export default function Command() {
 
       if (!cancelled) {
         setEpInfoMap(map);
-        setLoadingEpisodes(false);
+        setEpisodesReady(true);
       }
     })();
 
@@ -239,7 +246,7 @@ export default function Command() {
 
   const showContent = authenticated && !!username && !error;
   const isLoading = isWatching
-    ? loadingCollections || loadingCalendar || loadingEpisodes
+    ? loadingCollections || loadingCalendar || !episodesReady
     : loadingCollections;
 
   const isSearching = searchText.length > 0;
