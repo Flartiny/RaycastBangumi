@@ -511,10 +511,6 @@ function CollectionListItem({
               target={<SubjectDetail id={subject.id} name={subject.name} nameCn={subject.name_cn} />}
               onPop={onPop}
             />
-            <Action
-              title="刷新数据"
-              onAction={onRefresh}
-            />
           </ActionPanel.Section>
           <ActionPanel.Section>
             <Action.OpenInBrowser
@@ -558,6 +554,12 @@ function CollectionListItem({
               )}
             </ActionPanel.Section>
           )}
+          <ActionPanel.Section>
+            <Action
+              title="刷新数据"
+              onAction={onRefresh}
+            />
+          </ActionPanel.Section>
         </ActionPanel>
       }
     />
