@@ -168,19 +168,25 @@ export default function Command() {
 
       const map = new Map<number, EpInfo>();
       const todayStr = new Date().toISOString().slice(0, 10);
+      let allSucceeded = true;
       for (const r of results) {
         if (r.status === "fulfilled") {
           const { id, data } = r.value;
           const mainEps = data.data.filter((ep) => ep.type === 0);
           const airedCount = mainEps.filter((ep) => ep.airdate && ep.airdate <= todayStr).length;
           map.set(id, { aired: airedCount, total: mainEps.length });
+        } else {
+          allSucceeded = false;
         }
       }
 
-      const midnight = new Date();
-      midnight.setHours(24, 0, 0, 0);
-      await LocalStorage.setItem(`bgm-eps-v2-${key}`, JSON.stringify([...map]));
-      await LocalStorage.setItem("bgm-eps-expiry", String(midnight.getTime()));
+      // Only cache if every fetch succeeded, otherwise retry on next load
+      if (allSucceeded) {
+        const midnight = new Date();
+        midnight.setHours(24, 0, 0, 0);
+        await LocalStorage.setItem(`bgm-eps-v2-${key}`, JSON.stringify([...map]));
+        await LocalStorage.setItem("bgm-eps-expiry", String(midnight.getTime()));
+      }
 
       if (!cancelled) {
         setEpInfoMap(map);
@@ -488,17 +494,14 @@ function CollectionListItem({
       actions={
         <ActionPanel>
           <ActionPanel.Section>
-            <Action
-              title="刷新数据"
-              shortcut={{ key: "r", modifiers: ["cmd", "shift"] }}
-              onAction={onPop}
-            />
-          </ActionPanel.Section>
-          <ActionPanel.Section>
             <Action.Push
               title="查看详情"
               target={<SubjectDetail id={subject.id} name={subject.name} nameCn={subject.name_cn} />}
               onPop={onPop}
+            />
+            <Action
+              title="刷新数据"
+              onAction={onPop}
             />
           </ActionPanel.Section>
           <ActionPanel.Section>
