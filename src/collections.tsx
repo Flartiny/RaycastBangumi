@@ -229,7 +229,8 @@ export default function Command() {
     : sorted;
 
   // Fetch precise airing times from AniList for today's Group III items
-  const anilistFetchedRef = useRef("");
+  const anilistDoneRef = useRef("");
+  const fetchingRef = useRef(false);
   const [airingTimeMap, setAiringTimeMap] = useState<Map<number, { airingAt: number; episode: number }>>(new Map());
 
   useEffect(() => {
@@ -244,16 +245,19 @@ export default function Command() {
       .sort((a, b) => a - b)
       .join(",");
 
-    if (todayIds === anilistFetchedRef.current) return;
-    anilistFetchedRef.current = todayIds;
+    // Skip if already done for this exact set, or currently fetching
+    if (todayIds === anilistDoneRef.current || fetchingRef.current) return;
+    fetchingRef.current = true;
 
     if (!todayIds) {
       setAiringTimeMap(new Map());
+      anilistDoneRef.current = todayIds;
+      fetchingRef.current = false;
       return;
     }
 
     const ids = todayIds.split(",").map(Number);
-    let cancelled = false;
+    const currentSorted = sorted; // capture at effect start, stable for this run
     (async () => {
       const map = new Map<number, { airingAt: number; episode: number }>();
 
@@ -273,8 +277,9 @@ export default function Command() {
       // Fetch missing ones from AniList
       const missing = ids.filter((id) => !map.has(id));
       for (const id of missing) {
-        if (cancelled) return;
-        const c = sorted.find((x) => x.subject_id === id);
+        // Check if our run is still relevant
+        if (todayIds !== anilistDoneRef.current && anilistDoneRef.current !== "") break;
+        const c = currentSorted.find((x) => x.subject_id === id);
         const name = c?.subject.name;
         if (!name) continue;
         const result = await getAiringAt(name);
@@ -284,14 +289,18 @@ export default function Command() {
           const midnight = new Date();
           midnight.setHours(24, 0, 0, 0);
           await LocalStorage.setItem(`bgm-anilist-${id}`, JSON.stringify({ ...result, exp: midnight.getTime() }));
+          // Update map incrementally so UI reflects each result as it arrives
+          setAiringTimeMap(new Map(map));
         }
         await new Promise((r) => setTimeout(r, 700));
       }
 
-      if (!cancelled) setAiringTimeMap(map);
+      anilistDoneRef.current = todayIds;
+      fetchingRef.current = false;
+      setAiringTimeMap(map);
     })();
 
-    return () => { cancelled = true; };
+    // No cleanup — let the async loop finish
   }, [isWatching, sorted, airingMap, airedEpMap, today]);
 
   const displayLabels = new Map<number, string | null>();
