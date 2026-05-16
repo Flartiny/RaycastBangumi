@@ -100,12 +100,25 @@ export function getDisplayLabel(
   airingMap: Map<number, number>,
   airedEpMap: Map<number, number>,
   today: number,
+  airingTimeMap?: Map<number, { airingAt: number; episode: number }>,
 ): string | null {
   const { group, airedEp } = getCollectionMeta(c, airingMap, airedEpMap, today);
 
   if (group === "airing_caught") {
     const { weekday } = getCollectionMeta(c, airingMap, airedEpMap, today);
-    if (weekday === today) return "今日更新";
+    if (weekday === today) {
+      const at = airingTimeMap?.get(c.subject_id);
+      if (at) {
+        const nowSec = Date.now() / 1000;
+        if (nowSec < at.airingAt) {
+          const d = new Date(at.airingAt * 1000);
+          const hh = String(d.getHours()).padStart(2, "0");
+          const mm = String(d.getMinutes()).padStart(2, "0");
+          return `今日 ${hh}:${mm} 更新`;
+        }
+      }
+      return "今日更新";
+    }
     const tomorrow = today >= 7 ? 1 : today + 1;
     if (weekday === tomorrow) return "明日更新";
     return weekday > 0 ? `${WEEKDAY_CN[weekday].replace("星期", "周")}更新` : "等待更新";

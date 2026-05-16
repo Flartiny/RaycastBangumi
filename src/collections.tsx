@@ -1,13 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Action, ActionPanel, Color, Image, List, LocalStorage } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
 import { getUserCollections, getAllUserCollections, getCalendar, getEpisodes } from "./api/client";
+import { getAiringAt } from "./api/anilist";
 import { getUsername } from "./oauth";
 import { SubjectDetail } from "./subject-detail";
 import { useAuth } from "./hooks/useAuth";
 import { LoginLoading, LoginPrompt } from "./components/LoginPrompt";
 import { CollectionTypeLabel, SubjectTypeLabel } from "./api/types";
-import { sortCollections, getDisplayLabel, getTodayBangumiWeekday, WEEKDAY_CN } from "./sort-collections";
+import { sortCollections, getCollectionMeta, getDisplayLabel, getTodayBangumiWeekday, WEEKDAY_CN } from "./sort-collections";
 import { buildSubjectKeywords } from "./pinyin-keywords";
 import type { CollectionType, UserCollection } from "./api/types";
 
@@ -52,7 +53,7 @@ export default function Command() {
       if (expiry && Date.now() >= Number(expiry)) {
         const all = await LocalStorage.allItems();
         for (const key of Object.keys(all)) {
-          if (key.startsWith("bgm-eps-")) await LocalStorage.removeItem(key);
+          if (key.startsWith("bgm-eps-") || key.startsWith("bgm-anilist-")) await LocalStorage.removeItem(key);
         }
         await LocalStorage.removeItem("bgm-eps-v3-expiry");
       }
@@ -227,9 +228,75 @@ export default function Command() {
     ? sorted.slice((page - 1) * LIMIT, page * LIMIT)
     : sorted;
 
+  // Fetch precise airing times from AniList for today's Group III items
+  const anilistFetchedRef = useRef("");
+  const [airingTimeMap, setAiringTimeMap] = useState<Map<number, { airingAt: number; episode: number }>>(new Map());
+
+  useEffect(() => {
+    if (!isWatching || sorted.length === 0) return;
+
+    const todayIds = sorted
+      .filter((c) => {
+        const meta = getCollectionMeta(c, airingMap, airedEpMap, today);
+        return meta.group === "airing_caught" && meta.weekday === today;
+      })
+      .map((c) => c.subject_id)
+      .sort((a, b) => a - b)
+      .join(",");
+
+    if (todayIds === anilistFetchedRef.current) return;
+    anilistFetchedRef.current = todayIds;
+
+    if (!todayIds) {
+      setAiringTimeMap(new Map());
+      return;
+    }
+
+    const ids = todayIds.split(",").map(Number);
+    let cancelled = false;
+    (async () => {
+      const map = new Map<number, { airingAt: number; episode: number }>();
+
+      // Load cached AniList results (valid until midnight)
+      for (const id of ids) {
+        const cached = await LocalStorage.getItem<string>(`bgm-anilist-${id}`);
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached) as { airingAt: number; episode: number; exp: number };
+            if (Date.now() < parsed.exp) {
+              map.set(id, { airingAt: parsed.airingAt, episode: parsed.episode });
+            }
+          } catch { /* ignore corrupt cache */ }
+        }
+      }
+
+      // Fetch missing ones from AniList
+      const missing = ids.filter((id) => !map.has(id));
+      for (const id of missing) {
+        if (cancelled) return;
+        const c = sorted.find((x) => x.subject_id === id);
+        const name = c?.subject.name;
+        if (!name) continue;
+        const result = await getAiringAt(name);
+        if (result) {
+          map.set(id, result);
+          // Cache until midnight
+          const midnight = new Date();
+          midnight.setHours(24, 0, 0, 0);
+          await LocalStorage.setItem(`bgm-anilist-${id}`, JSON.stringify({ ...result, exp: midnight.getTime() }));
+        }
+        await new Promise((r) => setTimeout(r, 700));
+      }
+
+      if (!cancelled) setAiringTimeMap(map);
+    })();
+
+    return () => { cancelled = true; };
+  }, [isWatching, sorted, airingMap, airedEpMap, today]);
+
   const displayLabels = new Map<number, string | null>();
   for (const c of sorted) {
-    displayLabels.set(c.subject_id, getDisplayLabel(c, airingMap, airedEpMap, today));
+    displayLabels.set(c.subject_id, getDisplayLabel(c, airingMap, airedEpMap, today, airingTimeMap));
   }
 
   const typeLabel = CollectionTypeLabel[parseInt(collectionType) as CollectionType];
