@@ -47,13 +47,25 @@ function formatTime(airingAt: number | null): string {
 
 type DayKey = number | "tba";
 
-function closestWeekday(availableDays: Set<number>, today: number): number | null {
-  if (availableDays.size === 0) return null;
-  for (let offset = 0; offset < 7; offset++) {
-    const d = (today + offset) % 7;
-    if (availableDays.has(d)) return d;
+function earliestEntryDay(entries: SeasonEntry[]): DayKey {
+  let earliestDay: DayKey = "tba";
+  let earliestDate: Date | null = null;
+  for (const e of entries) {
+    if (e.airingAt) {
+      const d = new Date(e.airingAt * 1000);
+      if (!earliestDate || d < earliestDate) {
+        earliestDate = d;
+        earliestDay = e.weekday ?? "tba";
+      }
+    } else if (e.startDate.year && e.startDate.month && e.startDate.day) {
+      const d = new Date(e.startDate.year, e.startDate.month - 1, e.startDate.day);
+      if (!earliestDate || d < earliestDate) {
+        earliestDate = d;
+        earliestDay = e.weekday ?? "tba";
+      }
+    }
   }
-  return null;
+  return earliestDay;
 }
 
 export default function Command() {
@@ -103,15 +115,10 @@ export default function Command() {
   }
   const hasTba = groups.has("tba");
 
-  // Set default day to nearest on first data load
+  // Default to the day of the earliest upcoming entry
   useEffect(() => {
     if (allEntries.length === 0) return;
-    const nearest = closestWeekday(availableDays, today);
-    if (nearest !== null) {
-      setCurrentDay(nearest);
-    } else if (hasTba) {
-      setCurrentDay("tba");
-    }
+    setCurrentDay(earliestEntryDay(allEntries));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allEntries.length]);
 
