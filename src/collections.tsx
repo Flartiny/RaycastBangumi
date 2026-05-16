@@ -53,7 +53,7 @@ export default function Command() {
       if (expiry && Date.now() >= Number(expiry)) {
         const all = await LocalStorage.allItems();
         for (const key of Object.keys(all)) {
-          if (key.startsWith("bgm-eps-") || key.startsWith("bgm-anilist-")) await LocalStorage.removeItem(key);
+          if (key.startsWith("bgm-eps-")) await LocalStorage.removeItem(key);
         }
         await LocalStorage.removeItem("bgm-eps-v3-expiry");
       }
@@ -259,15 +259,13 @@ export default function Command() {
     (async () => {
       const map = new Map<number, { airingAt: number; episode: number }>();
 
-      // Load cached AniList results (valid until midnight)
+      // Load permanently cached AniList results
       for (const id of ids) {
         const cached = await LocalStorage.getItem<string>(`bgm-anilist-${id}`);
         if (cached) {
           try {
-            const parsed = JSON.parse(cached) as { airingAt: number; episode: number; exp: number };
-            if (Date.now() < parsed.exp) {
-              map.set(id, { airingAt: parsed.airingAt, episode: parsed.episode });
-            }
+            const parsed = JSON.parse(cached) as { airingAt: number; episode: number };
+            map.set(id, { airingAt: parsed.airingAt, episode: parsed.episode });
           } catch { /* ignore corrupt cache */ }
         }
       }
@@ -283,10 +281,8 @@ export default function Command() {
         const result = await getAiringAt(name);
         if (result) {
           map.set(id, result);
-          // Cache until midnight
-          const midnight = new Date();
-          midnight.setHours(24, 0, 0, 0);
-          await LocalStorage.setItem(`bgm-anilist-${id}`, JSON.stringify({ ...result, exp: midnight.getTime() }));
+          // Cache permanently
+          await LocalStorage.setItem(`bgm-anilist-${id}`, JSON.stringify(result));
           // Update map incrementally so UI reflects each result as it arrives
           setAiringTimeMap(new Map(map));
         }

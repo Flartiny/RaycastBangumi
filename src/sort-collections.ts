@@ -118,10 +118,6 @@ export function getDisplayLabel(
 
     const at = airingTimeMap?.get(c.subject_id);
     if (at) {
-      const nowSec = Date.now() / 1000;
-      if (weekday === today && nowSec >= at.airingAt) {
-        return "今日更新";
-      }
       const d = new Date(at.airingAt * 1000);
       const hh = String(d.getHours()).padStart(2, "0");
       const mm = String(d.getMinutes()).padStart(2, "0");
