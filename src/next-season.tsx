@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Action, ActionPanel, Image, List } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
 import { getNextSeason, getNextSeasonInfo } from "./api/anilist";
@@ -11,8 +11,8 @@ const WEEKDAY_CN: Record<number, string> = {
 };
 
 interface SeasonEntry extends NextSeasonItem {
-  weekday: number | null; // 0-6, null=TBA
-  nameCn: string | null;  // Bangumi cross-matched name
+  weekday: number | null;
+  nameCn: string | null;
   bangumiId: number | null;
 }
 
@@ -35,7 +35,7 @@ function formatDate(item: NextSeasonItem): string {
   if (year && month) {
     return `${year}年${month}月`;
   }
-  const { season, seasonYear, label } = getNextSeasonInfo();
+  const { label } = getNextSeasonInfo();
   return label;
 }
 
@@ -45,15 +45,26 @@ function formatTime(airingAt: number | null): string {
   return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
 }
 
+type DayKey = number | "tba";
+
+function closestWeekday(availableDays: Set<number>, today: number): number | null {
+  if (availableDays.size === 0) return null;
+  for (let offset = 0; offset < 7; offset++) {
+    const d = (today + offset) % 7;
+    if (availableDays.has(d)) return d;
+  }
+  return null;
+}
+
 export default function Command() {
   const { season, seasonYear, label } = getNextSeasonInfo();
-  const [dayFilter, setDayFilter] = useState("-1"); // -1 = all
+  const today = new Date().getDay(); // 0=Sun, 6=Sat
+  const [currentDay, setCurrentDay] = useState<DayKey>(today);
 
   const { isLoading, data: entries } = useCachedPromise(
     async (s: string, y: number) => {
       const items = await getNextSeason();
 
-      // Cross-match with Bangumi
       const results = await Promise.allSettled(
         items.map(async (item) => {
           const weekday = getWeekday(item);
@@ -77,49 +88,97 @@ export default function Command() {
 
   const allEntries = entries ?? [];
 
-  const displayed = dayFilter === "-1"
-    ? allEntries
-    : dayFilter === "-2"
-    ? allEntries.filter((e) => e.weekday === null)
-    : allEntries.filter((e) => e.weekday === Number(dayFilter));
-
-  // Sort: by weekday, TBA last
-  const sorted = [...displayed].sort((a, b) => {
-    if (a.weekday === null && b.weekday === null) return 0;
-    if (a.weekday === null) return 1;
-    if (b.weekday === null) return -1;
-    return a.weekday - b.weekday;
-  });
-
   // Group by weekday
-  const groups = new Map<number | "tba", SeasonEntry[]>();
-  for (const e of sorted) {
-    const key = e.weekday ?? "tba";
+  const groups = new Map<DayKey, SeasonEntry[]>();
+  for (const e of allEntries) {
+    const key: DayKey = e.weekday ?? "tba";
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(e);
   }
 
-  const weekdays = [0, 1, 2, 3, 4, 5, 6];
+  // Which weekdays have entries
+  const availableDays = new Set<number>();
+  for (const k of groups.keys()) {
+    if (k !== "tba") availableDays.add(k);
+  }
+  const hasTba = groups.has("tba");
+
+  // Set default day to nearest on first data load
+  useEffect(() => {
+    if (allEntries.length === 0) return;
+    const nearest = closestWeekday(availableDays, today);
+    if (nearest !== null) {
+      setCurrentDay(nearest);
+    } else if (hasTba) {
+      setCurrentDay("tba");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allEntries.length]);
+
+  const currentItems = groups.get(currentDay) ?? [];
+  const currentLabel = currentDay === "tba" ? "未定 (TBA)" : WEEKDAY_CN[currentDay];
+
+  function goNext() {
+    setCurrentDay((d) => {
+      if (d === "tba") return "tba";
+      const next = d >= 6 ? 0 : d + 1;
+      // Skip empty days forward
+      for (let offset = 0; offset < 14; offset++) {
+        const candidate = (d + 1 + offset) % 7;
+        if (availableDays.has(candidate)) return candidate;
+        if (offset >= 6 && hasTba) return "tba";
+      }
+      return next;
+    });
+  }
+
+  function goPrev() {
+    setCurrentDay((d) => {
+      if (d === "tba") {
+        // Go to last available weekday
+        for (let offset = 1; offset <= 7; offset++) {
+          const candidate = (today - offset + 7) % 7;
+          if (availableDays.has(candidate)) return candidate;
+        }
+        return "tba";
+      }
+      for (let offset = 1; offset < 14; offset++) {
+        const candidate = (d - offset + 7) % 7;
+        if (availableDays.has(candidate)) return candidate;
+        if (offset >= 6 && hasTba) return "tba";
+      }
+      return d;
+    });
+  }
+
+  const dayOptions: { label: string; value: string; count: number }[] = [];
+  for (const d of [0, 1, 2, 3, 4, 5, 6]) {
+    const count = (groups.get(d) ?? []).length;
+    if (count > 0) {
+      dayOptions.push({ label: WEEKDAY_CN[d], value: String(d), count });
+    }
+  }
+  if (hasTba) {
+    dayOptions.push({ label: "未定", value: "tba", count: groups.get("tba")!.length });
+  }
 
   return (
     <List
       isLoading={isLoading}
-      searchBarPlaceholder={`筛选${label}新番...`}
+      searchBarPlaceholder={`筛选${currentLabel}新番...`}
       searchBarAccessory={
         <List.Dropdown
-          tooltip="按放送日筛选"
-          value={dayFilter}
-          onChange={setDayFilter}
+          tooltip="选择星期"
+          value={String(currentDay)}
+          onChange={(v) => setCurrentDay(v === "tba" ? "tba" : Number(v))}
         >
-          <List.Dropdown.Item title="全部" value="-1" />
-          {weekdays.map((d) => (
+          {dayOptions.map((opt) => (
             <List.Dropdown.Item
-              key={d}
-              title={WEEKDAY_CN[d]}
-              value={String(d)}
+              key={opt.value}
+              title={`${opt.label} · ${opt.count}部`}
+              value={opt.value}
             />
           ))}
-          <List.Dropdown.Item title="未定" value="-2" />
         </List.Dropdown>
       }
     >
@@ -127,36 +186,27 @@ export default function Command() {
         <List.EmptyView title="暂无数据" description={`无法获取 ${label} 新番信息`} />
       )}
 
-      {/* Regular weekdays */}
-      {weekdays.map((wd) => {
-        const items = groups.get(wd);
-        if (!items || items.length === 0) return null;
-        return (
-          <List.Section key={wd} title={WEEKDAY_CN[wd]}>
-            {items.map((item) => (
-              <SeasonItem key={item.id} item={item} />
-            ))}
-          </List.Section>
-        );
-      })}
-
-      {/* TBA section */}
-      {(() => {
-        const tbaItems = groups.get("tba");
-        if (!tbaItems || tbaItems.length === 0) return null;
-        return (
-          <List.Section key="tba" title="未定 (TBA)">
-            {tbaItems.map((item) => (
-              <SeasonItem key={item.id} item={item} />
-            ))}
-          </List.Section>
-        );
-      })()}
+      <List.Section title={currentLabel} subtitle={currentDay === "tba" ? "播出日期未定" : undefined}>
+        {currentItems.length === 0 && !isLoading && (
+          <List.Item
+            title="暂无放送"
+            actions={
+              <ActionPanel>
+                <Action title="前一天" shortcut={{ key: "arrowLeft", modifiers: [] }} onAction={goPrev} />
+                <Action title="后一天" shortcut={{ key: "arrowRight", modifiers: [] }} onAction={goNext} />
+              </ActionPanel>
+            }
+          />
+        )}
+        {currentItems.map((item) => (
+          <SeasonItem key={item.id} item={item} onPrev={goPrev} onNext={goNext} />
+        ))}
+      </List.Section>
     </List>
   );
 }
 
-function SeasonItem({ item }: { item: SeasonEntry }) {
+function SeasonItem({ item, onPrev, onNext }: { item: SeasonEntry; onPrev: () => void; onNext: () => void }) {
   const displayName = item.nameCn || item.title.native;
   const dateStr = formatDate(item);
   const timeStr = formatTime(item.airingAt);
@@ -181,13 +231,24 @@ function SeasonItem({ item }: { item: SeasonEntry }) {
       accessories={accessories}
       actions={
         <ActionPanel>
-          <Action.OpenInBrowser title="查看详情" url={url} />
-          {item.bangumiId && (
-            <Action.CopyToClipboard
-              title="复制名称"
-              content={displayName}
+          <ActionPanel.Section>
+            <Action.OpenInBrowser title="查看详情" url={url} />
+            {item.bangumiId && (
+              <Action.CopyToClipboard title="复制名称" content={displayName} />
+            )}
+          </ActionPanel.Section>
+          <ActionPanel.Section>
+            <Action
+              title="前一天"
+              shortcut={{ key: "arrowLeft", modifiers: [] }}
+              onAction={onPrev}
             />
-          )}
+            <Action
+              title="后一天"
+              shortcut={{ key: "arrowRight", modifiers: [] }}
+              onAction={onNext}
+            />
+          </ActionPanel.Section>
         </ActionPanel>
       }
     />
