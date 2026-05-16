@@ -236,27 +236,25 @@ export default function Command() {
   useEffect(() => {
     if (!isWatching || sorted.length === 0) return;
 
-    const todayIds = sorted
-      .filter((c) => {
-        const meta = getCollectionMeta(c, airingMap, airedEpMap, today);
-        return meta.group === "airing_caught" && meta.weekday === today;
-      })
+    // Pre-fetch AniList for ALL airing items (ep>0)
+    const preloadIds = sorted
+      .filter((c) => airingMap.has(c.subject_id) && c.ep_status > 0)
       .map((c) => c.subject_id)
       .sort((a, b) => a - b)
       .join(",");
 
     // Skip if already done for this exact set, or currently fetching
-    if (todayIds === anilistDoneRef.current || fetchingRef.current) return;
+    if (preloadIds === anilistDoneRef.current || fetchingRef.current) return;
     fetchingRef.current = true;
 
-    if (!todayIds) {
+    if (!preloadIds) {
       setAiringTimeMap(new Map());
-      anilistDoneRef.current = todayIds;
+      anilistDoneRef.current = preloadIds;
       fetchingRef.current = false;
       return;
     }
 
-    const ids = todayIds.split(",").map(Number);
+    const ids = preloadIds.split(",").map(Number);
     const currentSorted = sorted; // capture at effect start, stable for this run
     (async () => {
       const map = new Map<number, { airingAt: number; episode: number }>();
@@ -278,7 +276,7 @@ export default function Command() {
       const missing = ids.filter((id) => !map.has(id));
       for (const id of missing) {
         // Check if our run is still relevant
-        if (todayIds !== anilistDoneRef.current && anilistDoneRef.current !== "") break;
+        if (preloadIds !== anilistDoneRef.current && anilistDoneRef.current !== "") break;
         const c = currentSorted.find((x) => x.subject_id === id);
         const name = c?.subject.name;
         if (!name) continue;
@@ -295,7 +293,7 @@ export default function Command() {
         await new Promise((r) => setTimeout(r, 700));
       }
 
-      anilistDoneRef.current = todayIds;
+      anilistDoneRef.current = preloadIds;
       fetchingRef.current = false;
       setAiringTimeMap(map);
     })();
