@@ -41,6 +41,13 @@
       "subtitle": "Bangumi"
     },
     {
+      "name": "next-season",
+      "title": "Bangumi Next Season",
+      "description": "Preview the upcoming anime season",
+      "mode": "view",
+      "subtitle": "Bangumi"
+    },
+    {
       "name": "collections",
       "title": "Bangumi List",
       "description": "Browse your collections (Wish/Collect/Do)",

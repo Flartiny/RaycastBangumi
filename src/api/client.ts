@@ -62,6 +62,17 @@ async function request<T>(
   return JSON.parse(text) as T;
 }
 
+/** Search Bangumi for an anime subject by name, returns first match */
+export async function searchAnimeSubject(keyword: string): Promise<{ id: number; name_cn: string } | null> {
+  try {
+    const resp = await searchSubjects({ keyword, type: [2], limit: 3 });
+    const match = resp.data?.[0];
+    return match ? { id: match.id, name_cn: match.name_cn || match.name } : null;
+  } catch {
+    return null;
+  }
+}
+
 /** GET /calendar — 每日放送 */
 export async function getCalendar(): Promise<CalendarItem[]> {
   return request<CalendarItem[]>("/calendar");
