@@ -53,50 +53,42 @@ const bangumiOAuth = new OAuthService({
   },
 });
 
-/** Check login status without triggering OAuth flow */
-export async function isLoggedIn(): Promise<boolean> {
-  for (let i = 0; i < 3; i++) {
-    try {
-      const tokens = await oauthClient.getTokens();
-      return !!tokens?.accessToken;
-    } catch (e) {
-      if (i === 2) {
-        console.error("getTokens failed after 3 attempts:", e);
-        return false;
-      }
-      await new Promise((r) => setTimeout(r, 1000));
-    }
-  }
-  return false;
-}
-
-/** Get access token via OAuthService. Handles refresh and re-auth automatically. */
+/**
+ * Get a valid access token.
+ * - Returns cached token if still valid
+ * - Refreshes if expired
+ * - Starts full OAuth flow if no tokens exist
+ */
 export async function getAccessToken(): Promise<string> {
   const token = await bangumiOAuth.authorize();
   return token ?? "";
 }
 
-/** Start OAuth login flow. Automatically retries on network errors. */
-export async function login(): Promise<boolean> {
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      await bangumiOAuth.authorize();
-      fetchAndCacheUsername().catch(() => {});
-      return true;
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : "";
-      if (msg.includes("ConnectTimeoutError") || msg.includes("fetch failed")) {
-        console.error(`OAuth attempt ${attempt} failed:`, msg);
-        if (attempt < 3) {
-          await new Promise((r) => setTimeout(r, 2000));
-          continue;
-        }
-      }
-      console.error("OAuth login failed:", error);
-      return false;
-    }
+/**
+ * Check if tokens exist WITHOUT triggering OAuth flow.
+ * Only reads from secure storage.
+ */
+export async function isLoggedIn(): Promise<boolean> {
+  try {
+    const tokens = await oauthClient.getTokens();
+    return !!tokens?.accessToken;
+  } catch {
+    return false;
   }
-  return false;
+}
+
+/**
+ * Start OAuth login flow. Returns true if login succeeded.
+ */
+export async function login(): Promise<boolean> {
+  try {
+    await bangumiOAuth.authorize();
+    fetchAndCacheUsername().catch(() => {});
+    return true;
+  } catch (error) {
+    console.error("OAuth login failed:", error);
+    return false;
+  }
 }
 
 async function fetchAndCacheUsername() {
@@ -119,13 +111,11 @@ async function fetchAndCacheUsername() {
   }
 }
 
-/** Get username from cache (auto-detected on first login) */
 export async function getUsername(): Promise<string> {
   const cached = await LocalStorage.getItem<string>(USERNAME_CACHE_KEY);
   return cached ?? "";
 }
 
-/** Remove stored tokens (also available via Raycast Settings) */
 export async function logout(): Promise<void> {
   await oauthClient.removeTokens();
 }
