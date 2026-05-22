@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { isLoggedIn, login } from "../oauth";
+import { getAccessToken, isLoggedIn, login } from "../oauth";
 
 export function useAuth({ autoLogin }: { autoLogin?: boolean } = {}) {
   const [authLoading, setAuthLoading] = useState(true);
@@ -7,26 +7,30 @@ export function useAuth({ autoLogin }: { autoLogin?: boolean } = {}) {
   const [loginFailed, setLoginFailed] = useState(false);
   const triedRef = useRef(false);
 
-  const checkAuth = useCallback(async () => {
-    try {
-      const ok = await isLoggedIn();
-      setAuthenticated(ok);
-      return ok;
-    } catch {
-      setAuthenticated(false);
-      return false;
-    } finally {
-      setAuthLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
-    checkAuth().then((ok) => {
+    (async () => {
+      // First try: check stored tokens (no side effects)
+      let ok = await isLoggedIn();
+
+      // Second try: if getTokens() failed transiently, try OAuthService which
+      // may recover and refresh the token
+      if (!ok) {
+        try {
+          const token = await getAccessToken();
+          ok = !!token;
+        } catch {
+          ok = false;
+        }
+      }
+
+      setAuthenticated(ok);
+      setAuthLoading(false);
+
       if (!ok && autoLogin && !triedRef.current) {
         triedRef.current = true;
         handleLogin();
       }
-    });
+    })();
   }, []);
 
   async function handleLogin() {
