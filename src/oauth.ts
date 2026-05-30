@@ -54,14 +54,34 @@ const bangumiOAuth = new OAuthService({
 });
 
 /**
+ * Single-flight guard around authorize().
+ *
+ * Bangumi rotates refresh tokens: each successful refresh invalidates the
+ * previous refresh_token. getAccessToken() runs on every API request and the
+ * app fires many requests concurrently, so when the access token expires
+ * multiple authorize() calls would each try to refresh with the same stored
+ * refresh_token. The first wins and rotates it; the rest hit
+ * "invalid_grant / Invalid refresh token", which makes Raycast's OAuthService
+ * wipe all tokens and force a full re-login. Sharing one in-flight authorize()
+ * across concurrent callers ensures exactly one refresh happens.
+ */
+let authorizeInFlight: Promise<string> | null = null;
+
+/**
  * Get a valid access token.
  * - Returns cached token if still valid
  * - Refreshes if expired
  * - Starts full OAuth flow if no tokens exist
  */
 export async function getAccessToken(): Promise<string> {
-  const token = await bangumiOAuth.authorize();
-  return token ?? "";
+  if (authorizeInFlight) return authorizeInFlight;
+
+  authorizeInFlight = bangumiOAuth.authorize().then((token) => token ?? "");
+  try {
+    return await authorizeInFlight;
+  } finally {
+    authorizeInFlight = null;
+  }
 }
 
 /**
@@ -93,7 +113,7 @@ export async function login(): Promise<boolean> {
 
 async function fetchAndCacheUsername() {
   try {
-    const token = await bangumiOAuth.authorize();
+    const token = await getAccessToken();
     const res = await fetch("https://api.bgm.tv/v0/me", {
       headers: {
         Authorization: `Bearer ${token}`,
